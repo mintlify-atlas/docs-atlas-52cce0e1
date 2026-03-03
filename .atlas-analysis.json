@@ -1,0 +1,127 @@
+{
+  "projectType": "saas",
+  "projectName": "Ayase Quart",
+  "projectDescription": "A web interface for browsing and managing 4chan/Lainchan archives using the Asagi database schema.",
+  "theme": "sequoia",
+  "primaryColor": "#0F4C81",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/web-interface",
+              "features/search",
+              "features/moderation",
+              "features/api"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/overview",
+              "configuration/database",
+              "configuration/boards",
+              "configuration/media",
+              "configuration/search-engines",
+              "configuration/moderation"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/archive-setup",
+              "guides/search-setup",
+              "guides/moderation-guide",
+              "guides/ssl-certificates",
+              "guides/production-deployment"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "plugins/overview",
+              "plugins/search-plugins",
+              "plugins/blueprint-plugins"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/contributing",
+              "development/architecture",
+              "development/debugging"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Web Endpoints",
+            "pages": [
+              "api/web/boards",
+              "api/web/threads",
+              "api/web/search"
+            ]
+          },
+          {
+            "group": "API Endpoints",
+            "pages": [
+              "api/endpoints/app",
+              "api/endpoints/auth",
+              "api/endpoints/moderation",
+              "api/endpoints/admin"
+            ]
+          },
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "api/cli/overview",
+              "api/cli/prep",
+              "api/cli/search",
+              "api/cli/reports"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "4chan-like web interface for archives",
+    "Advanced search with FTS support",
+    "Moderation system with reporting",
+    "Plugin architecture for extensibility",
+    "Multi-database support (MySQL, SQLite, PostgreSQL)",
+    "REST API for programmatic access",
+    "CLI tools for management"
+  ],
+  "publicApiSurface": [
+    "Web Routes: /, /{board}, /{board}/thread/{num}, /{board}/catalog, /search",
+    "API Routes: /api/v1/login, /api/v1/boards, /api/v1/threads, /api/v1/search",
+    "CLI Commands: ayaseq prep, ayaseq search, python -m ayase_quart.cli.reports",
+    "Moderation API: /api/v1/moderation/reports, /api/v1/admin/*",
+    "Search Plugins: SearchPlugin interface",
+    "Blueprint Plugins: Quart Blueprint interface"
+  ]
+}
