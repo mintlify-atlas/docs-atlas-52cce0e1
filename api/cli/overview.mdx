@@ -7,13 +7,27 @@ The Ayase Quart CLI provides comprehensive tools for managing your 4chan/Laincha
 
 ## Command structure
 
-All CLI commands follow the pattern:
+Ayase Quart provides two CLI interfaces:
+
+### ayaseq command (main CLI)
+
+The primary CLI accessible via the `ayaseq` command:
 
 ```bash
-python -m ayase_quart <command> <subcommand> [options]
+ayaseq <command> <subcommand> [options]
 ```
 
-The CLI is organized into three main command groups:
+Available command groups:
+- **prep** - System preparation and configuration
+- **search** - Search index management and loading
+
+### reports command (legacy CLI)
+
+A separate Click-based CLI for moderation:
+
+```bash
+python -m ayase_quart.cli.reports <command> [options]
+```
 
 <CardGroup cols={3}>
   <Card title="prep" icon="wrench" href="/api/cli/prep">
@@ -34,9 +48,9 @@ The CLI is organized into three main command groups:
     Generate required secrets and hashes before first launch:
     
     ```bash
-    python -m ayase_quart prep secret
-    python -m ayase_quart prep hashjs
-    python -m ayase_quart prep boards
+    ayaseq prep secret
+    ayaseq prep hashjs
+    ayaseq prep boards
     ```
   </Step>
   
@@ -44,8 +58,8 @@ The CLI is organized into three main command groups:
     Initialize the search index and load posts:
     
     ```bash
-    python -m ayase_quart search index create
-    python -m ayase_quart search load full a vg
+    ayaseq search index create
+    ayaseq search load full a vg
     ```
   </Step>
   
@@ -53,7 +67,7 @@ The CLI is organized into three main command groups:
     View and manage user-submitted reports:
     
     ```bash
-    python -m ayase_quart mod report list
+    python -m ayase_quart.cli.reports cli-get-reports
     ```
   </Step>
 </Steps>
@@ -63,9 +77,10 @@ The CLI is organized into three main command groups:
 Display help for any command by running it without arguments or with `--help`:
 
 ```bash
-python -m ayase_quart --help
-python -m ayase_quart prep --help
-python -m ayase_quart search index --help
+ayaseq --help
+ayaseq prep --help
+ayaseq search index --help
+python -m ayase_quart.cli.reports --help
 ```
 
 ## Common patterns
@@ -75,7 +90,7 @@ python -m ayase_quart search index --help
 Use the `--cron` flag to run incremental operations continuously:
 
 ```bash
-python -m ayase_quart search load incr --cron 300 a vg
+ayaseq search load incr --cron 300 a vg
 ```
 
 This will index new posts every 300 seconds (5 minutes).
@@ -85,8 +100,8 @@ This will index new posts every 300 seconds (5 minutes).
 Many commands accept board shortnames to limit operations:
 
 ```bash
-python -m ayase_quart search load full a vg pol
-python -m ayase_quart mod report list -b a -b vg
+ayaseq search load full a vg pol
+python -m ayase_quart.cli.reports cli-get-reports -boards a -boards vg
 ```
 
 ### Working with reports
@@ -95,13 +110,32 @@ Report IDs are used throughout the moderation commands:
 
 ```bash
 # View reports
-python -m ayase_quart mod report list
+python -m ayase_quart.cli.reports cli-get-reports
+
+# Count reports
+python -m ayase_quart.cli.reports cli-get-report-count
 
 # Take action on specific reports
-python -m ayase_quart mod report close 123
-python -m ayase_quart mod post hide 123
+python -m ayase_quart.cli.reports cli-reports-action -id 123 -action post_hide
 ```
 
 <Note>
   The CLI uses Python's asyncio for database and search operations. Some commands may take time to complete depending on the size of your archive.
 </Note>
+
+## CLI entry points
+
+From `pyproject.toml`:
+
+```toml
+[project.scripts]
+ayaseq = 'ayase_quart.cli:main'
+```
+
+This creates the `ayaseq` command when the package is installed.
+
+For the reports CLI, run the module directly:
+
+```bash
+python -m ayase_quart.cli.reports
+```
