@@ -1,0 +1,240 @@
+---
+title: Installation
+description: Step-by-step guide to installing and configuring Ayase Quart for browsing 4chan and Lainchan archives.
+---
+
+## Prerequisites
+
+Before installing Ayase Quart, ensure you have the following:
+
+- Python 3.12.x or 3.13.x
+- SQLite 3.35.0 or higher (check with `python -c "import sqlite3; print(sqlite3.sqlite_version)"`)
+- A data source using the Asagi database schema (MySQL, SQLite, or PostgreSQL)
+- System packages: `python3-dev`, `default-libmysqlclient-dev`, `build-essential`
+
+<Warning>
+At least SQLite version 3.35.0 is required for moderation tools. Ayase Quart was developed against SQLite 3.47.0.
+</Warning>
+
+## Installation steps
+
+<Steps>
+  <Step title="Create virtual environment and install dependencies">
+    Create a Python virtual environment and install all required packages:
+
+    ```bash
+    python -m venv venv
+    source venv/bin/activate
+    python -m pip install -r requirements.txt
+    python -m pip install .
+    ```
+
+    Install system dependencies:
+
+    ```bash
+    sudo apt update
+    sudo apt install python3-dev default-libmysqlclient-dev build-essential redis-server
+    ```
+  </Step>
+
+  <Step title="Configure boards">
+    Copy the board template and configure your desired boards:
+
+    ```bash
+    cp ./boards.tpl.toml ./boards.toml
+    ```
+
+    Edit `boards.toml` with your archive's boards. Templates are provided for both 4chan and Lainchan:
+
+    ```toml boards.toml
+    [boards]
+    g = 'Technology'
+    a = 'Anime & Manga'
+    v = 'Video Games'
+    # Add more boards as needed
+    ```
+  </Step>
+
+  <Step title="Configure application settings">
+    Copy the configuration template and edit with your settings:
+
+    ```bash
+    cp ./config.tpl.toml ./config.toml
+    ```
+
+    Generate a secret key (used for CSRF, API tokens, etc.):
+
+    ```bash
+    ayaseq prep secret
+    ```
+
+    This will automatically update your `config.toml` with a secure secret key.
+
+    <Note>
+    The secret key is critical for security. The `ayaseq prep secret` command generates a cryptographically secure key and automatically updates your configuration file.
+    </Note>
+  </Step>
+
+  <Step title="Set up database connection">
+    Edit `config.toml` to configure your database connection. Ayase Quart supports MySQL, SQLite, and PostgreSQL.
+
+    <CodeGroup>
+    ```toml MySQL
+    [db]
+    db_type = 'mysql'
+    echo = false
+
+    [db.mysql]
+    host = '127.0.0.1'
+    port = 3306
+    db = 'asagi'
+    user = 'asagi'
+    password = 'asagi'
+    minsize = 1
+    maxsize = 50
+    ```
+
+    ```toml SQLite
+    [db]
+    db_type = 'sqlite'
+    echo = false
+
+    [db.sqlite]
+    database = 'path/to/file.db'
+    ```
+
+    ```toml PostgreSQL
+    [db]
+    db_type = 'postgresql'
+    echo = false
+
+    [db.postgresql]
+    host = 'localhost'
+    port = 5432
+    user = 'asagi'
+    password = 'asagi'
+    database = 'asagi'
+    min_size = 1
+    max_size = 50
+    ```
+    </CodeGroup>
+
+    If you don't have a data source yet, set up one of these archive downloaders:
+    - [Ritual (SQLite)](https://github.com/sky-cake/Ritual)
+    - [Neofuuka (MySQL)](https://github.com/bibanon/neofuuka-scraper)
+    - [Hayden (MySQL)](https://github.com/bbepis/Hayden)
+  </Step>
+
+  <Step title="Configure SSL certificates (optional)">
+    If not using a reverse proxy, create SSL certificates for HTTPS access:
+
+    ```bash
+    openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem
+    ```
+
+    Place `cert.pem` and `key.pem` in the current working directory.
+
+    <Note>
+    Certificates are required for moderation features (web-based authentication) unless you set `moderation.auth.cookie_secure=false` in your config.
+    </Note>
+  </Step>
+
+  <Step title="Set up Redis for moderation (optional)">
+    Configure Redis for moderation bloom filtering:
+
+    ```bash
+    # Edit Redis configuration
+    sudo nano /etc/redis/redis.conf
+    # Set line 'supervised no' to 'supervised systemd'
+    # Configure listening port and other settings
+
+    sudo systemctl restart redis
+    sudo systemctl status redis
+    ```
+
+    Update your `config.toml` with Redis settings:
+
+    ```toml
+    [redis]
+    host = "127.0.0.1"
+    port = 6379
+    max_connections = 1000
+    ```
+  </Step>
+
+  <Step title="Generate JavaScript integrity hashes">
+    Set HTML `<script>` integrity checksums for security:
+
+    ```bash
+    ayaseq prep hashjs
+    ```
+
+    This creates `asset_hashes.json` with SHA-384 hashes for all JavaScript files.
+  </Step>
+</Steps>
+
+## Optional: Full-text search setup
+
+Ayase Quart supports multiple full-text search engines for advanced search capabilities.
+
+### Supported search engines
+
+| Engine | Status | Documentation |
+|--------|--------|---------------|
+| LNX 0.9.0 | Fully supported, tested | [docs.lnx.rs](https://docs.lnx.rs/) |
+| Meilisearch | Partial support | [meilisearch.com](https://www.meilisearch.com/docs/) |
+| Typesense | Partial support | [typesense.org](https://typesense.org/docs/) |
+
+### LNX setup example
+
+<Steps>
+  <Step title="Configure search engine in config.toml">
+    ```toml
+    [index_search]
+    enabled = true
+    highlight = false
+    hits_per_page = 50
+    max_hits = 1_000
+    provider = 'lnx'
+    host = 'http://localhost:8000'
+    ```
+  </Step>
+
+  <Step title="Start LNX with Docker">
+    ```bash
+    cd index_search/lnx/
+    sudo docker-compose up
+    ```
+  </Step>
+
+  <Step title="Create and populate the search index">
+    ```bash
+    ayaseq search index create
+    ayaseq search load full g v a pol
+    ```
+
+    Replace `g v a pol` with your board shortnames.
+  </Step>
+</Steps>
+
+<Note>
+Only LNX 0.9.0 is fully supported. Version 0.10.0 is not a completed version.
+</Note>
+
+## Verify installation
+
+Check your SQLite version:
+
+```bash
+python -c "import sqlite3; print(sqlite3.sqlite_version)"
+```
+
+Verify your boards are configured correctly:
+
+```bash
+ayaseq prep boards
+```
+
+## Next steps
+
+Once installation is complete, proceed to the [Quickstart](/quickstart) guide to launch your Ayase Quart instance and start browsing your archive.

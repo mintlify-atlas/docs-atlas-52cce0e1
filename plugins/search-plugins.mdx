@@ -1,0 +1,258 @@
+---
+title: Search plugins
+description: Create custom search plugins to extend Ayase Quart's search functionality
+---
+
+Search plugins allow you to add custom search fields and logic to Ayase Quart. They integrate with the existing search form and can filter results based on custom criteria.
+
+## How search plugins work
+
+Search plugins return post numbers grouped by board. These results are then intersected with other plugin results and native search results to produce the final search results.
+
+The plugin system:
+1. Collects results from all enabled search plugins
+2. Intersects the results (if plugin #1 returns 0 results and plugin #2 returns 100, the final result is 0)
+3. Performs native search filtering on the intersection
+4. Returns paginated results
+
+## Creating a search plugin
+
+<Steps>
+  <Step title="Create your plugin file">
+    Create a new Python file in `src/ayase_quart/plugins/search/`:
+
+    ```bash
+    touch src/ayase_quart/plugins/search/my_plugin.py
+    ```
+  </Step>
+
+  <Step title="Implement the SearchPlugin class">
+    Your plugin must implement the `SearchPlugin` abstract base class from `i_search.py`:
+
+    ```python
+    from jinja2 import Template
+    from wtforms import Field, StringField
+    from wtforms.validators import DataRequired
+
+    from ...forms import SearchForm
+    from ...templates import env
+    from ..i_search import SearchPlugin, SearchPluginResult
+
+    class MySearchPlugin(SearchPlugin):
+        # Define form fields for your plugin
+        fields: list[Field] = [
+            StringField(
+                label='SHA256',
+                name='sha256',
+                id='sha256',
+                validators=[DataRequired(message='Please enter a sha256sum.')]
+            ),
+        ]
+
+        # Define HTML template for your fields
+        template: Template = env.from_string("""
+            {% from 'macros/macros.html' import render_field %}
+            <link rel="stylesheet" href="/static/plugins/example.css">
+            {{render_field(form.sha256)}}
+        """)
+
+        async def get_search_plugin_result(self, form: SearchForm) -> SearchPluginResult:
+            result = SearchPluginResult()
+            
+            # Access your custom field
+            sha256_value = form.sha256.data
+            
+            # Perform your custom search logic here
+            # For example, query a database, external API, etc.
+            
+            # Populate results with board names and post numbers
+            result.board_2_nums = {
+                'g': {1, 2, 3},
+                'b': {1, 3, 5}
+            }
+            
+            # Optionally add flash messages
+            result.add_flash_msg('Found matching posts')
+            
+            # Indicate that a search was performed
+            result.performed_search = True
+            
+            return result
+    ```
+  </Step>
+
+  <Step title="Enable plugins in config">
+    Make sure plugins are enabled in your `config.toml`:
+
+    ```toml
+    [search_plugins]
+    enabled = true
+    ```
+  </Step>
+
+  <Step title="Restart Ayase Quart">
+    Restart the application to load your plugin. You should see:
+
+    ```bash
+    Loading search plugin: ayase_quart.plugins.search.my_plugin
+    ```
+  </Step>
+</Steps>
+
+## SearchPlugin interface
+
+### Required attributes
+
+<ParamField path="fields" type="list[Field]">
+  WTForms field definitions for your custom search inputs. These are added to the main search form.
+</ParamField>
+
+<ParamField path="template" type="Template">
+  Jinja2 template that renders your form fields. Any HTML in this template will be rendered on the search page.
+</ParamField>
+
+### Required methods
+
+<ParamField path="get_search_plugin_result" type="async method">
+  The main search logic for your plugin.
+
+  **Parameters:**
+  - `form: SearchForm` - The complete search form including your custom fields
+
+  **Returns:**
+  - `SearchPluginResult` - Object containing search results
+</ParamField>
+
+## SearchPluginResult class
+
+The result object you return from your plugin:
+
+```python
+class SearchPluginResult:
+    # Dictionary mapping board names to sets of post numbers
+    board_2_nums: dict[str, set[int]] = {}
+    
+    # HTML message to display to the user
+    flash_msg: str = ''
+    
+    # Whether a search was actually performed
+    performed_search: bool = False
+```
+
+### Methods
+
+<ParamField path="add_flash_msg" type="method">
+  Add a message to display to the user. Multiple messages are joined with `<br>`.
+
+  ```python
+  result.add_flash_msg('Found 5 matching posts')
+  ```
+</ParamField>
+
+## Complete example
+
+Here's the complete example from `src/ayase_quart/plugins/search/search_example.py`:
+
+```python
+from jinja2 import Template
+from wtforms import Field, StringField
+from wtforms.validators import DataRequired
+
+from ...forms import SearchForm
+from ...templates import env
+from ..i_search import SearchPlugin, SearchPluginResult
+
+
+class SearchPluginExample(SearchPlugin):
+    # Define custom form fields
+    fields: list[Field] = [
+        StringField(
+            label='sha256',
+            name='sha256',
+            id='sha256',
+            validators=[DataRequired(message='Please enter a sha256sum.')]
+        ),
+    ]
+
+    # Define the HTML template for rendering fields
+    # WARNING: Any HTML in this string WILL be rendered
+    template: Template = env.from_string("""
+        {% from 'macros/macros.html' import render_field %}
+        <link rel="stylesheet" href="/static/plugins/example.css">
+        {{render_field(form.sha256)}}
+    """)
+
+    async def get_search_plugin_result(self, form: SearchForm) -> SearchPluginResult:
+        # Perform your search based on the sha256 input...
+        result = SearchPluginResult()
+        
+        # Example: populate with post numbers by board
+        # result.board_2_nums = {'g': {1, 2, 3}, 'b': {1, 3, 5}}
+        
+        return result
+```
+
+<Note>
+  The example is wrapped in `if 0:` to maintain syntax highlighting without loading it by default. Remove this condition in your actual plugin.
+</Note>
+
+## Important considerations
+
+<Warning>
+  Be careful with field name/id collisions. Ensure your field names don't conflict with existing search form fields.
+</Warning>
+
+### Security
+
+- Any HTML in your template **will be rendered**. Sanitize user input appropriately.
+- Be cautious when making external API calls or database queries in `get_search_plugin_result`.
+
+### Performance
+
+- Consider the [post-filtering limitation](/plugins/overview#post-filtering-consideration) when implementing pagination.
+- If only your plugin fields are submitted, implement standard pagination.
+- If combined with other search fields, return more results than `per_page` to account for filtering.
+
+### Result intersection
+
+All plugin results are intersected. If your plugin returns an empty `board_2_nums`, the final search result will be empty regardless of what other plugins return.
+
+## Plugin loading process
+
+The system automatically discovers plugins in `src/ayase_quart/plugins/search/` using this logic from `i_search.py:84`:
+
+```python
+def load_search_plugins() -> dict[str, SearchPlugin]:
+    """Returns {<plugin module name>: <SearchPlugin>}"""
+    plugins: dict[str, SearchPlugin] = {}
+    package_module = importlib.import_module(f'{REPO_PKG}.plugins.search')
+
+    for _, module_name, is_pkg in pkgutil.iter_modules(
+        package_module.__path__, 
+        package_module.__name__ + '.'
+    ):
+        module = importlib.import_module(module_name)
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if isinstance(attr, type) and issubclass(attr, SearchPlugin) and attr is not SearchPlugin:
+                print(f'Loading search plugin: {module_name}')
+                plugins[module_name] = attr()
+    return plugins
+```
+
+The plugin loader:
+1. Scans all modules in the `plugins.search` package
+2. Looks for classes that inherit from `SearchPlugin`
+3. Instantiates and registers each plugin class
+4. Logs successful loading to stdout
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Plugin overview" icon="puzzle-piece" href="/plugins/overview">
+    Learn about the plugin system
+  </Card>
+  <Card title="Blueprint plugins" icon="route" href="/plugins/blueprint-plugins">
+    Create custom endpoints
+  </Card>
+</CardGroup>

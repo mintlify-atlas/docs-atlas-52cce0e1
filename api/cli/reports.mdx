@@ -1,0 +1,634 @@
+---
+title: reports commands
+description: Manage user reports and moderate content through the command line
+---
+
+The `mod` command group provides comprehensive moderation tools for managing user-submitted reports, hiding or deleting posts, and controlling media visibility. All commands use the Click library for a polished CLI experience.
+
+## Usage
+
+```bash
+python -m ayase_quart mod <category> <action> [options]
+```
+
+## Command categories
+
+The moderation CLI is organized into three categories:
+
+- **report** - Manage report metadata (status, notes, visibility)
+- **post** - Control post visibility and deletion
+- **media** - Control media/attachment visibility and deletion
+
+---
+
+## report commands
+
+Manage user-submitted reports and their metadata.
+
+### report list
+
+Display reports with optional filters. Results are shown in a formatted table.
+
+```bash
+python -m ayase_quart mod report list [filters]
+```
+
+**Available filters:**
+
+<ParamField path="-id" type="integer">
+  Filter by report parent ID
+</ParamField>
+
+<ParamField path="-boards" type="string[]">
+  Filter by board shortnames (e.g., `-boards a -boards vg`)
+</ParamField>
+
+<ParamField path="-op" type="boolean">
+  Only show reports on opening posts
+</ParamField>
+
+<ParamField path="-tno" type="integer">
+  Filter by thread number
+</ParamField>
+
+<ParamField path="-pno" type="integer">
+  Filter by post number
+</ParamField>
+
+<ParamField path="-cat" type="choice">
+  Filter by submitter category:
+  - `illegal_content`
+  - `dcma`
+  - `underage`
+  - `embedded_data`
+  - `doxxing`
+  - `work_safe`
+  - `spamming`
+  - `advertising`
+  - `impersonation`
+  - `bots`
+  - `other`
+</ParamField>
+
+<ParamField path="-access" type="choice">
+  Filter by public access visibility:
+  - `v` - visible
+  - `h` - hidden
+</ParamField>
+
+<ParamField path="-status" type="choice">
+  Filter by moderation status:
+  - `o` - open (default)
+  - `c` - closed
+</ParamField>
+
+<ParamField path="-cgte" type="date">
+  Created at or after date (format: YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="-clte" type="date">
+  Created at or before date (format: YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="-pgno" type="integer">
+  Page number (default: 0)
+</ParamField>
+
+<ParamField path="-pgsize" type="integer">
+  Page size (default: 20)
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod report list -status o -boards a -pgsize 50
+```
+
+**Output:**
+```
+| report_parent_id | board_shortname | thread_num | num    | category        | status | link                                    |
+|------------------+-----------------+------------+--------+-----------------+--------+-----------------------------------------|
+| 123              | a               | 98765432   | 98765440 | spam            | o      | https://example.com/a/thread/98765432#p98765440 |
+| 124              | a               | 98765000   | 98765010 | illegal_content | o      | https://example.com/a/thread/98765000#p98765010 |
+```
+
+**Implementation details:**
+- Calls `get_reports()` with filter parameters (src/ayase_quart/cli/reports.py:81)
+- Adds clickable link to each report (src/ayase_quart/cli/reports.py:83)
+- Uses `tabulate` for formatted output (src/ayase_quart/cli/utils.py:26)
+
+---
+
+### report count
+
+Show the total number of reports matching the given filters.
+
+```bash
+python -m ayase_quart mod report count [filters]
+```
+
+Accepts the same filter options as `report list` (except pagination).
+
+**Example:**
+```bash
+python -m ayase_quart mod report count -status o -cat spam
+```
+
+**Output:**
+```
+Report count: 42
+```
+
+**Implementation details:**
+- Calls `get_report_count()` (src/ayase_quart/cli/reports.py:71)
+- Useful for monitoring moderation queue size
+
+---
+
+### report open
+
+Mark one or more reports as open (requiring moderation attention).
+
+```bash
+python -m ayase_quart mod report open <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  One or more report parent IDs to mark as open
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod report open 123 124 125
+```
+
+**Implementation details:**
+- Defined in arguments as setting `mod_status` to open (src/ayase_quart/cli/arguments.py:176)
+- Updates report metadata without affecting post visibility
+
+---
+
+### report close
+
+Mark one or more reports as closed (resolved).
+
+```bash
+python -m ayase_quart mod report close <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  One or more report parent IDs to mark as closed
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod report close 123 124
+```
+
+---
+
+### report addnote
+
+Add a moderation note to one or more reports.
+
+```bash
+python -m ayase_quart mod report addnote "<NOTE>" <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="NOTE" type="string" required>
+  Text note to add (enclose in quotes)
+</ParamField>
+
+<ParamField path="REPORT_ID" type="integer" required>
+  One or more report parent IDs
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod report addnote "Reviewed with legal team" 123
+```
+
+<Note>
+  Notes are appended to existing notes. Use quotes to preserve spaces and special characters.
+</Note>
+
+---
+
+### report edit
+
+Update multiple fields of one or more reports simultaneously.
+
+```bash
+python -m ayase_quart mod report edit [options] <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="-id" type="integer" required>
+  Report parent ID to edit
+</ParamField>
+
+<ParamField path="-access" type="choice">
+  Set public access: `v` (visible) or `h` (hidden)
+</ParamField>
+
+<ParamField path="-status" type="choice">
+  Set moderation status: `o` (open) or `c` (closed)
+</ParamField>
+
+<ParamField path="-notes" type="string">
+  Set moderation notes
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod report edit -id 123 -status c -access h -notes "Resolved by admin"
+```
+
+**Output:**
+```
+Updated
+```
+
+Or if report doesn't exist:
+```
+Report not found
+```
+
+**Implementation details:**
+- Calls `edit_report_if_exists()` (src/ayase_quart/cli/reports.py:98)
+- Can update any combination of fields
+- Only provided fields are updated (others remain unchanged)
+
+---
+
+### report delete
+
+Permanently delete one or more reports from the database.
+
+```bash
+python -m ayase_quart mod report delete <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  One or more report parent IDs to delete
+</ParamField>
+
+<Warning>
+  This permanently deletes the report record. The reported post/media is not affected.
+</Warning>
+
+**Example:**
+```bash
+python -m ayase_quart mod report delete 123
+```
+
+**Output:**
+```
+Deleted
+```
+
+**Implementation details:**
+- Calls `delete_report_if_exists()` (src/ayase_quart/cli/reports.py:109)
+- Removes report from database
+- Does not affect the reported content itself
+
+---
+
+## post commands
+
+Manage visibility and deletion of reported posts.
+
+### post show
+
+Make a post visible (unhide it) based on the associated report.
+
+```bash
+python -m ayase_quart mod post show <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  Report ID whose associated post should be shown
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod post show 123
+```
+
+**Output:**
+```
+Success (200): Post visibility updated
+```
+
+**Implementation details:**
+- Calls `reports_action_routine()` with `post_show` action (src/ayase_quart/cli/arguments.py:183-184)
+- Reverses a previous hide operation
+
+---
+
+### post hide
+
+Hide a post from public view without deleting it.
+
+```bash
+python -m ayase_quart mod post hide <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  Report ID whose associated post should be hidden
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod post hide 123 124
+```
+
+**Use cases:**
+- Temporarily removing questionable content
+- Pending review by senior moderators
+- Soft moderation approach
+
+---
+
+### post delete
+
+Permanently delete a post from the archive.
+
+```bash
+python -m ayase_quart mod post delete <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  Report ID whose associated post should be deleted
+</ParamField>
+
+<Warning>
+  This permanently removes the post from the database. This action cannot be undone.
+</Warning>
+
+**Example:**
+```bash
+python -m ayase_quart mod post delete 123
+```
+
+**Output:**
+```
+Success (200): Post deleted
+```
+
+---
+
+## media commands
+
+Manage visibility and deletion of media/attachments on reported posts.
+
+### media show
+
+Make media visible (unhide it) on the reported post.
+
+```bash
+python -m ayase_quart mod media show <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  Report ID whose associated media should be shown
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod media show 123
+```
+
+---
+
+### media hide
+
+Hide media from public view without deleting it. The post text remains visible.
+
+```bash
+python -m ayase_quart mod media hide <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  Report ID whose associated media should be hidden
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart mod media hide 123
+```
+
+**Use cases:**
+- Hiding NSFW content on SFW boards
+- Concealing potentially illegal content during investigation
+- Removing disturbing images while preserving discussion
+
+---
+
+### media delete
+
+Permanently delete media files from the server and remove references from the database.
+
+```bash
+python -m ayase_quart mod media delete <REPORT_ID> [<REPORT_ID> ...]
+```
+
+<ParamField path="REPORT_ID" type="integer" required>
+  Report ID whose associated media should be deleted
+</ParamField>
+
+<Warning>
+  This permanently removes media files from disk. This action cannot be undone.
+</Warning>
+
+**Example:**
+```bash
+python -m ayase_quart mod media delete 123
+```
+
+---
+
+## Complete moderation workflows
+
+### Handling a spam report
+
+<Steps>
+  <Step title="Review reports">
+    ```bash
+    python -m ayase_quart mod report list -cat spamming -status o
+    ```
+    See all open spam reports.
+  </Step>
+  
+  <Step title="Delete spam post">
+    ```bash
+    python -m ayase_quart mod post delete 123
+    ```
+    Remove the spam post.
+  </Step>
+  
+  <Step title="Close report">
+    ```bash
+    python -m ayase_quart mod report close 123
+    ```
+    Mark as resolved.
+  </Step>
+</Steps>
+
+### Handling NSFW content on SFW board
+
+<Steps>
+  <Step title="Hide the media">
+    ```bash
+    python -m ayase_quart mod media hide 124
+    ```
+    Remove inappropriate image.
+  </Step>
+  
+  <Step title="Add note">
+    ```bash
+    python -m ayase_quart mod report addnote "Media hidden, post preserved" 124
+    ```
+    Document the action.
+  </Step>
+  
+  <Step title="Close report">
+    ```bash
+    python -m ayase_quart mod report close 124
+    ```
+    Mark as resolved.
+  </Step>
+</Steps>
+
+### Investigating illegal content
+
+<Steps>
+  <Step title="List urgent reports">
+    ```bash
+    python -m ayase_quart mod report list -cat illegal_content -status o
+    ```
+    View all illegal content reports.
+  </Step>
+  
+  <Step title="Hide immediately">
+    ```bash
+    python -m ayase_quart mod post hide 125
+    python -m ayase_quart mod media hide 125
+    ```
+    Remove from public view during investigation.
+  </Step>
+  
+  <Step title="Add investigation notes">
+    ```bash
+    python -m ayase_quart mod report addnote "Escalated to legal team, case #2024-001" 125
+    ```
+    Track the investigation.
+  </Step>
+  
+  <Step title="Final action">
+    After investigation completes:
+    ```bash
+    python -m ayase_quart mod post delete 125
+    python -m ayase_quart mod report close 125
+    ```
+  </Step>
+</Steps>
+
+## Report categories reference
+
+The following categories are available for filtering and classification:
+
+| Value | Description |
+|-------|-------------|
+| `illegal_content` | Illegal content (CP, terrorism, etc.) |
+| `dcma` | DMCA copyright violation |
+| `underage` | Underage content on 18+ board |
+| `embedded_data` | Media files with hidden embedded data |
+| `doxxing` | Personal information disclosure |
+| `work_safe` | NSFW content on SFW board |
+| `spamming` | Spam or flooding |
+| `advertising` | Commercial advertising |
+| `impersonation` | Impersonating another user |
+| `bots` | Bot or scraper activity |
+| `other` | Other issues not listed |
+
+**Source:** src/ayase_quart/enums.py:39-50
+
+## Status and visibility values
+
+### Moderation status
+
+| Value | Code | Meaning |
+|-------|------|---------|
+| Open | `o` | Requires moderation attention |
+| Closed | `c` | Resolved or dismissed |
+
+### Public access
+
+| Value | Code | Meaning |
+|-------|------|---------|
+| Visible | `v` | Report visible to public |
+| Hidden | `h` | Report hidden from public view |
+
+## CLI implementation details
+
+<AccordionGroup>
+  <Accordion title="Click framework">
+    The reports CLI uses the Click library (unlike prep/search which use argparse). This provides:
+    - Type validation for choices and dates
+    - Automatic help generation
+    - Decorator-based option definitions
+    
+    Source: src/ayase_quart/cli/reports.py:6
+  </Accordion>
+  
+  <Accordion title="Filter decorators">
+    Report filters are applied via the `@report_filters` decorator, which adds all filter options to commands:
+    
+    ```python
+    @report_filters
+    def cli_get_reports(**kwargs):
+        reports = asyncio.run(get_reports(**kwargs))
+    ```
+    
+    Source: src/ayase_quart/cli/reports.py:27-42
+  </Accordion>
+  
+  <Accordion title="Async execution">
+    All report commands use `asyncio.run()` to execute async database operations:
+    
+    ```python
+    report_count = asyncio.run(get_report_count(**kwargs))
+    ```
+    
+    Source: src/ayase_quart/cli/reports.py:71
+  </Accordion>
+  
+  <Accordion title="Database cleanup">
+    The `@close_all_databases` decorator ensures database connections are properly closed after each command completes.
+    
+    Source: src/ayase_quart/cli/reports.py:69, 79, 96, 107, 120
+  </Accordion>
+</AccordionGroup>
+
+## Error codes
+
+The `reports_action_routine` returns HTTP-style status codes:
+
+| Code Range | Meaning | Example Output |
+|------------|---------|----------------|
+| 200-299 | Success | `Success (200): Post deleted` |
+| 400-499 | Client error | `Error (404): Report not found` |
+| 500-599 | Server error | `Error (500): Database error` |
+
+**Implementation:** src/ayase_quart/cli/utils.py:11-15
+
+## Running report commands as cron jobs
+
+For automated moderation tasks, run commands via cron:
+
+```bash
+# Close old reports daily at 2 AM
+0 2 * * * cd /path/to/ayase && python -m ayase_quart mod report close $(python -m ayase_quart mod report list -clte 2024-01-01 -status o | tail -n +2 | awk '{print $1}')
+
+# Count open reports hourly
+0 * * * * python -m ayase_quart mod report count -status o >> /var/log/ayase/report-counts.log
+```

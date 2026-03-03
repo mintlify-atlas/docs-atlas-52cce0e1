@@ -1,0 +1,535 @@
+---
+title: Production deployment
+description: Deploy Ayase Quart to production with systemd, process management, and best practices
+---
+
+Deploy Ayase Quart to a production server with proper process management, security, and monitoring.
+
+## Prerequisites
+
+Before deploying to production:
+
+- Python 3.12.x or 3.13.x installed
+- Archive database set up (MySQL or SQLite)
+- SSL certificates configured (if using moderation)
+- Server with sufficient resources
+
+<Tip>
+  Review the [quick start guide](/quickstart) to ensure basic setup is complete.
+</Tip>
+
+## Production checklist
+
+<Steps>
+  <Step title="Update configuration">
+    Update `config.toml` for production:
+
+    ```toml
+    [app]
+    testing = false
+    autoreload = false
+    url = 'https://your-domain.com'
+    rate_limiter = true
+    allow_robots = false  # or true if you want search engines
+
+    [moderation.auth]
+    cookie_secure = true  # Required for HTTPS
+    ```
+
+    <Warning>
+      Change default admin credentials:
+      ```toml
+      [moderation]
+      admin_user = 'your_admin'
+      admin_password = 'strong_password_here'
+      ```
+    </Warning>
+  </Step>
+
+  <Step title="Generate secret key">
+    Create a secure secret key for CSRF and API tokens:
+
+    ```bash
+    ayaseq prep secret
+    ```
+
+    This automatically updates `config.toml` with a secure random key.
+  </Step>
+
+  <Step title="Generate asset hashes">
+    Create integrity checksums for JavaScript files:
+
+    ```bash
+    ayaseq prep hashjs
+    ```
+
+    This creates `asset_hashes.json` for script tag integrity verification.
+  </Step>
+
+  <Step title="Verify board configuration">
+    Ensure `boards.toml` contains your archived boards:
+
+    ```bash
+    cp boards.4chan.tpl.toml boards.toml
+    # Edit boards.toml to include only your boards
+    ```
+  </Step>
+</Steps>
+
+## Systemd service setup
+
+Deploy Ayase Quart as a systemd service for automatic startup and process management.
+
+<Steps>
+  <Step title="Create service user">
+    Create a dedicated user for running Ayase Quart:
+
+    ```bash
+    sudo useradd -r -s /bin/bash -d /aq ayasequart
+    sudo mkdir -p /aq
+    sudo chown ayasequart:ayasequart /aq
+    ```
+  </Step>
+
+  <Step title="Set up application directory">
+    Move your Ayase Quart installation to the production directory:
+
+    ```bash
+    sudo cp -r /path/to/ayase-quart/* /aq/
+    sudo chown -R ayasequart:ayasequart /aq
+    ```
+
+    Install in virtualenv:
+
+    ```bash
+    sudo -u ayasequart bash
+    cd /aq
+    python -m venv venv
+    source venv/bin/activate
+    python -m pip install -r requirements.txt
+    python -m pip install .
+    exit
+    ```
+  </Step>
+
+  <Step title="Create hypercorn configuration">
+    Copy the hypercorn template:
+
+    ```bash
+    cd /aq
+    cp src/ayase_quart/hypercorn.tpl.py hypercorn_conf.py
+    ```
+
+    Edit `hypercorn_conf.py`:
+
+    ```python
+    workers = 3
+    bind = '0.0.0.0:9001'
+    # Add SSL if not using reverse proxy:
+    # certfile = '/aq/cert.pem'
+    # keyfile = '/aq/key.pem'
+    ```
+  </Step>
+
+  <Step title="Create systemd service file">
+    Create `/etc/systemd/system/ayasequart.service`:
+
+    ```ini
+    [Unit]
+    Description=AyaseQuart
+    After=network-online.target
+
+    [Service]
+    Type=simple
+    WorkingDirectory=/aq
+    Environment="PATH=/aq/venv/bin"
+    ExecStartPre=/aq/venv/bin/ayaseq prep hashjs
+    ExecStart=/aq/venv/bin/hypercorn --config file:/aq/hypercorn_conf.py ayase_quart.main:app
+
+    User=ayasequart
+    Group=ayasequart
+
+    Restart=on-failure
+    RestartSec=10
+
+    SyslogIdentifier=ayasequart
+    StandardOutput=journal
+    StandardError=journal
+
+    # Security hardening
+    ProtectHome=true
+    ProtectKernelModules=true
+    ProtectKernelLogs=true
+    ProtectControlGroups=true
+    RestrictAddressFamilies=AF_INET
+    NoNewPrivileges=true
+    ProtectProc=invisible
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+    <Note>
+      - Adjust `workers` in hypercorn config based on CPU cores
+      - Add `After=mysql.service` if using MySQL
+      - Uncomment `ProtectSystem=strict` for additional security (requires proper path permissions)
+    </Note>
+  </Step>
+
+  <Step title="Enable and start service">
+    Enable the service to start on boot:
+
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable ayasequart
+    sudo systemctl start ayasequart
+    ```
+
+    Check status:
+
+    ```bash
+    sudo systemctl status ayasequart
+    ```
+  </Step>
+</Steps>
+
+## Reverse proxy setup
+
+Use a reverse proxy for SSL termination, caching, and load balancing.
+
+### nginx configuration
+
+<Steps>
+  <Step title="Install nginx">
+    ```bash
+    sudo apt update
+    sudo apt install nginx
+    ```
+  </Step>
+
+  <Step title="Create site configuration">
+    Create `/etc/nginx/sites-available/ayase-quart`:
+
+    ```nginx
+    server {
+        listen 80;
+        server_name your-domain.com;
+        return 301 https://$server_name$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name your-domain.com;
+
+        # SSL certificates (managed by certbot)
+        ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+
+        # Proxy to Ayase Quart
+        location / {
+            proxy_pass http://127.0.0.1:9001;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+        }
+
+        # Serve static files directly (optional optimization)
+        location /static/ {
+            alias /aq/src/ayase_quart/static/;
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+        }
+
+        # Media files with sendfile (if configured)
+        location /srv/media/ {
+            internal;
+            alias /;
+            sendfile on;
+            sendfile_max_chunk 1m;
+            tcp_nopush on;
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Enable site">
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/ayase-quart /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl restart nginx
+    ```
+  </Step>
+</Steps>
+
+### Caddy configuration
+
+Caddy provides automatic HTTPS with Let's Encrypt:
+
+```
+your-domain.com {
+    reverse_proxy localhost:9001
+    
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+    }
+}
+```
+
+## Performance tuning
+
+### Hypercorn workers
+
+Adjust workers based on CPU cores:
+
+```python
+# hypercorn_conf.py
+workers = 4  # 2x CPU cores is a good starting point
+```
+
+### Database connection pooling
+
+Optimize database connections in `config.toml`:
+
+```toml
+[db.mysql]
+minsize = 5
+maxsize = 100  # Adjust based on workers and load
+
+[redis]
+max_connections = 1000
+```
+
+<Warning>
+  Ensure your system's `ulimit` is high enough:
+  ```bash
+  ulimit -n 65535
+  ```
+  Add to `/etc/security/limits.conf` for persistence.
+</Warning>
+
+### Static file serving
+
+For better performance, serve static files through nginx (shown in nginx config above).
+
+For media files, enable nginx sendfile in `config.toml`:
+
+```toml
+[media]
+use_nginx_sendfile = true
+nginx_x_accel_redirect_path = '/srv/media'
+```
+
+## Monitoring and logs
+
+### View logs
+
+Check application logs:
+
+```bash
+# Follow logs in real-time
+sudo journalctl -u ayasequart -f
+
+# View recent logs
+sudo journalctl -u ayasequart -n 100
+
+# Logs since boot
+sudo journalctl -u ayasequart -b
+```
+
+### Monitor resource usage
+
+```bash
+# Check process status
+systemctl status ayasequart
+
+# Monitor resources
+top -u ayasequart
+
+# Check connections
+ss -tlnp | grep :9001
+```
+
+## Updating Ayase Quart
+
+Safely update to the latest version:
+
+<Steps>
+  <Step title="Pull latest changes">
+    ```bash
+    cd /aq
+    sudo -u ayasequart git pull --ff origin main
+    ```
+  </Step>
+
+  <Step title="Update dependencies">
+    ```bash
+    sudo -u ayasequart bash
+    source venv/bin/activate
+    python -m pip install -r requirements.txt
+    python -m pip install .
+    exit
+    ```
+  </Step>
+
+  <Step title="Regenerate asset hashes">
+    ```bash
+    sudo -u ayasequart /aq/venv/bin/ayaseq prep hashjs
+    ```
+  </Step>
+
+  <Step title="Check configuration">
+    Review `config.tpl.toml` for new options:
+
+    ```bash
+    diff /aq/config.toml /aq/config.tpl.toml
+    ```
+
+    Add any new required fields to your `config.toml`.
+  </Step>
+
+  <Step title="Restart service">
+    ```bash
+    sudo systemctl restart ayasequart
+    sleep 2
+    sudo systemctl status ayasequart
+    ```
+  </Step>
+</Steps>
+
+## Backup strategies
+
+### Configuration backup
+
+```bash
+# Backup configuration files
+sudo tar -czf aq-config-$(date +%Y%m%d).tar.gz \
+  /aq/config.toml \
+  /aq/boards.toml \
+  /aq/cert.pem \
+  /aq/key.pem
+```
+
+### Database backup
+
+**MySQL:**
+```bash
+mysqldump -u asagi -p hayden_asagi > backup-$(date +%Y%m%d).sql
+```
+
+**SQLite:**
+```bash
+sqlite3 /path/to/database.db ".backup backup-$(date +%Y%m%d).db"
+```
+
+### Moderation database backup
+
+```bash
+sqlite3 /path/to/moderation.db ".backup moderation-backup-$(date +%Y%m%d).db"
+```
+
+## Security considerations
+
+<Warning>
+  **Before going live:**
+  - Change default admin credentials
+  - Generate a new secret key
+  - Enable HTTPS with valid certificates
+  - Set up firewall rules (ufw/iptables)
+  - Keep the system and dependencies updated
+</Warning>
+
+### Firewall configuration
+
+```bash
+# Allow SSH
+sudo ufw allow 22/tcp
+
+# Allow HTTP/HTTPS (if using reverse proxy)
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Or allow Ayase Quart directly (if no reverse proxy)
+sudo ufw allow 9001/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+### Rate limiting
+
+Ensure rate limiting is enabled in `config.toml`:
+
+```toml
+[app]
+rate_limiter = true
+```
+
+For additional protection, configure rate limiting in nginx:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=aq_limit:10m rate=10r/s;
+
+server {
+    location / {
+        limit_req zone=aq_limit burst=20;
+        proxy_pass http://127.0.0.1:9001;
+    }
+}
+```
+
+## Troubleshooting
+
+### Service won't start
+
+```bash
+# Check detailed status
+sudo systemctl status ayasequart
+
+# View full logs
+sudo journalctl -u ayasequart -n 50 --no-pager
+
+# Test configuration
+sudo -u ayasequart /aq/venv/bin/hypercorn --config file:/aq/hypercorn_conf.py ayase_quart.main:app
+```
+
+### Permission errors
+
+```bash
+# Fix ownership
+sudo chown -R ayasequart:ayasequart /aq
+
+# Check file permissions
+ls -la /aq/
+```
+
+### Database connection issues
+
+Verify database connectivity:
+
+```bash
+# MySQL
+mysql -h 127.0.0.1 -u asagi -p hayden_asagi
+
+# Check if service is running
+sudo systemctl status mysql
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Search setup" icon="magnifying-glass" href="/guides/search-setup">
+    Add full-text search for better performance
+  </Card>
+  <Card title="Moderation guide" icon="shield" href="/guides/moderation-guide">
+    Configure content moderation and reporting
+  </Card>
+</CardGroup>

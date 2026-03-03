@@ -1,0 +1,86 @@
+---
+title: Introduction to Ayase Quart
+description: A powerful web interface for browsing 4chan and Lainchan archives using the Asagi database schema with advanced search, moderation tools, and a familiar imageboard experience.
+---
+
+## Welcome to Ayase Quart
+
+Ayase Quart (AQ) is a modern, feature-rich interface for 4chan/Lainchan archives built on the Asagi database schema. It provides a web UI that looks and feels like 4chan, combined with powerful search capabilities and comprehensive moderation tools.
+
+<CardGroup cols={2}>
+  <Card title="Familiar interface" icon="desktop">
+    Browse archives with a web UI that looks and feels just like 4chan
+  </Card>
+  <Card title="Advanced search" icon="magnifying-glass">
+    Full-text search with multiple engines, gallery mode, and complex query patterns
+  </Card>
+  <Card title="Moderation system" icon="shield">
+    Comprehensive tools for viewing reports, filtering content, and managing your archive
+  </Card>
+  <Card title="Multi-database support" icon="database">
+    Works with MySQL, SQLite, and PostgreSQL through the Asagi schema
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Web interface
+- **Authentic 4chan experience** - The interface closely mimics 4chan's look and feel
+- **Intelligent quotelink previews** - Hover over post references to see inline previews
+- **Catalog view** - Browse threads visually with thumbnail previews
+- **Database-level pagination** - Efficient navigation through large archives
+
+### Search capabilities
+Search replies where the opening post's comment includes specific patterns, use full-text search with supported engines (LNX, Meilisearch, Typesense), and view results in gallery mode.
+
+<Note>
+Ayase Quart supports multiple full-text search engines including LNX (fully supported), Meilisearch (partial support), and Typesense (partial support).
+</Note>
+
+### Moderation system
+- **Report management** - View and process user-submitted reports
+- **Auto-hide** - Automatically hide reported content
+- **Content filtering** - Filter all content based on regex patterns
+- **Multiple interfaces** - Access moderation features via web UI, REST API, or CLI
+
+### Compatible archive downloaders
+
+Ayase Quart works seamlessly with popular archive downloaders:
+
+- [Ritual (SQLite)](https://github.com/sky-cake/Ritual) - SQLite-based scraper
+- [Neofuuka (MySQL)](https://github.com/bibanon/neofuuka-scraper) - MySQL scraper for 4chan
+- [Hayden (MySQL)](https://github.com/bbepis/Hayden) - Efficient MySQL-based archiver
+
+## Technology stack
+
+Ayase Quart is built with:
+
+- **Quart** - Async Python web framework
+- **Hypercorn** - ASGI web server
+- **Asagi schema** - Standard imageboard archive database schema
+- **Redis** - For moderation bloom filtering and statistics caching
+- **Multiple search engines** - LNX, Meilisearch, or Typesense for full-text search
+
+## Project lineage
+
+This project is a descendant of [Ayase](https://github.com/bibanon/ayase), modernized and enhanced with async capabilities, improved search, and additional features.
+
+## Requirements
+
+<Warning>
+Python 3.12.x or 3.13.x is required. SQLite 3.35.0 or higher is needed for moderation tools (developed against 3.47.0).
+</Warning>
+
+- Python 3.12.x or 3.13.x
+- SQLite 3.35.0+ (for moderation features)
+- MySQL, SQLite, or PostgreSQL database
+- Redis (optional, for bloom filtering)
+- Full-text search engine (optional)
+
+## Open source
+
+Ayase Quart uses the GNU Affero General Public License v3.0 (GNU AGPLv3). The "Powered by Ayase Quart" footer should remain visible on all instances.
+
+## Get started
+
+Ready to set up your own archive? Check out the [Installation](/installation) guide to get started, or jump to the [Quickstart](/quickstart) for a rapid setup walkthrough.

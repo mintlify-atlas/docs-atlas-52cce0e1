@@ -1,0 +1,245 @@
+---
+title: Database configuration
+description: Configure MySQL, PostgreSQL, or SQLite database connections for Ayase Quart
+---
+
+Ayase Quart supports three database types: MySQL, PostgreSQL, and SQLite. The database stores archived posts, threads, and media metadata.
+
+## Database type selection
+
+Set the database type in the `[db]` section:
+
+<ParamField path="db_type" type="string" default="mysql" required>
+  Database type to use
+  
+  **Options:**
+  - `mysql`
+  - `postgresql`
+  - `sqlite`
+</ParamField>
+
+<ParamField path="echo" type="boolean" default="false">
+  Print rendered SQL statements to console for debugging
+</ParamField>
+
+## MySQL configuration
+
+Configure MySQL connection settings in the `[db.mysql]` section. These follow pymysql/aiomysql connection keys.
+
+<CodeGroup>
+```toml MySQL with TCP
+[db]
+db_type = 'mysql'
+echo = false
+
+[db.mysql]
+host = '127.0.0.1'
+port = 3306
+db = 'asagi'
+user = 'asagi'
+password = 'asagi'
+minsize = 1
+maxsize = 50
+```
+
+```toml MySQL with Unix socket
+[db]
+db_type = 'mysql'
+echo = false
+
+[db.mysql]
+unix_socket = '/var/run/mysqld/mysqld.sock'
+db = 'asagi'
+user = 'asagi'
+password = 'asagi'
+minsize = 1
+maxsize = 50
+```
+</CodeGroup>
+
+### MySQL parameters
+
+<ParamField path="host" type="string" default="127.0.0.1">
+  MySQL server hostname or IP address
+</ParamField>
+
+<ParamField path="port" type="integer" default="3306">
+  MySQL server port
+</ParamField>
+
+<ParamField path="unix_socket" type="string">
+  Path to MySQL Unix socket. Use this instead of host/port for local connections.
+  
+  **Example:** `/var/run/mysqld/mysqld.sock`
+</ParamField>
+
+<ParamField path="db" type="string" default="asagi" required>
+  Database name
+</ParamField>
+
+<ParamField path="user" type="string" default="asagi" required>
+  Database username
+</ParamField>
+
+<ParamField path="password" type="string" default="asagi" required>
+  Database password
+</ParamField>
+
+<ParamField path="minsize" type="integer" default="1">
+  Minimum number of connections in the connection pool
+</ParamField>
+
+<ParamField path="maxsize" type="integer" default="50">
+  Maximum number of connections in the connection pool
+</ParamField>
+
+<Note>
+  A connection pool is created per database per process for optimal performance.
+</Note>
+
+## PostgreSQL configuration
+
+Configure PostgreSQL connection settings in the `[db.postgresql]` section. These follow aiosqlite connection keys.
+
+```toml
+[db]
+db_type = 'postgresql'
+echo = false
+
+[db.postgresql]
+host = 'localhost'
+port = 5432
+user = 'asagi'
+password = 'asagi'
+database = 'asagi'
+min_size = 1
+max_size = 50
+```
+
+### PostgreSQL parameters
+
+<ParamField path="host" type="string" default="localhost">
+  PostgreSQL server hostname or IP address. Also used for Unix domain socket connections.
+</ParamField>
+
+<ParamField path="port" type="integer" default="5432">
+  PostgreSQL server port
+</ParamField>
+
+<ParamField path="user" type="string" default="asagi" required>
+  Database username
+</ParamField>
+
+<ParamField path="password" type="string" default="asagi" required>
+  Database password
+</ParamField>
+
+<ParamField path="database" type="string" default="asagi" required>
+  Database name
+</ParamField>
+
+<ParamField path="min_size" type="integer" default="1">
+  Minimum number of connections in the connection pool
+</ParamField>
+
+<ParamField path="max_size" type="integer" default="50">
+  Maximum number of connections in the connection pool
+</ParamField>
+
+## SQLite configuration
+
+Configure SQLite database file path in the `[db.sqlite]` section. These follow aiosqlite connection keys.
+
+```toml
+[db]
+db_type = 'sqlite'
+echo = false
+
+[db.sqlite]
+database = 'path/to/file.db'
+```
+
+### SQLite parameters
+
+<ParamField path="database" type="string" default="path/to/file.db" required>
+  Path to the SQLite database file. Can be relative or absolute.
+</ParamField>
+
+<Note>
+  SQLite is suitable for smaller archives or development environments. For production deployments with multiple boards and high traffic, MySQL or PostgreSQL is recommended.
+</Note>
+
+## Database schema
+
+Ayase Quart expects database tables to follow the Asagi schema format. Each board has its own table with the board's shortname.
+
+<Accordion title="Validating board tables">
+  The `validate_boards_db` option in the `[app]` section controls whether Ayase Quart validates that all boards defined in `boards.toml` have corresponding database tables at startup.
+  
+  ```toml
+  [app]
+  validate_boards_db = true
+  ```
+  
+  Set to `false` to skip validation if you're adding board configurations before their data is available.
+</Accordion>
+
+## Connection pooling
+
+Ayase Quart creates a connection pool per database per process. The pool size is controlled by:
+
+- **MySQL:** `minsize` and `maxsize`
+- **PostgreSQL:** `min_size` and `max_size`
+- **SQLite:** No pooling configuration needed
+
+### Recommended pool sizes
+
+<AccordionGroup>
+  <Accordion title="Development">
+    - `minsize`/`min_size`: 1
+    - `maxsize`/`max_size`: 10
+  </Accordion>
+  
+  <Accordion title="Production (small/medium)">
+    - `minsize`/`min_size`: 5
+    - `maxsize`/`max_size`: 50
+  </Accordion>
+  
+  <Accordion title="Production (large/high traffic)">
+    - `minsize`/`min_size`: 10
+    - `maxsize`/`max_size`: 100
+    
+    <Warning>
+      Ensure your database server's `max_connections` setting can accommodate all connection pools across all application processes.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused errors">
+    - Verify the database server is running
+    - Check host and port are correct
+    - Ensure firewall rules allow connections
+    - For MySQL, try using `unix_socket` for local connections
+  </Accordion>
+  
+  <Accordion title="Authentication failures">
+    - Verify username and password are correct
+    - Check database user has appropriate permissions
+    - Ensure user can connect from the application's host
+  </Accordion>
+  
+  <Accordion title="Too many connections">
+    - Reduce `maxsize`/`max_size` in connection pool settings
+    - Increase database server's `max_connections`
+    - Check for connection leaks in application logs
+  </Accordion>
+  
+  <Accordion title="Board table not found">
+    - Verify board tables exist in the database
+    - Check table names match board shortnames exactly
+    - Ensure `validate_boards_db` is set appropriately
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,294 @@
+---
+title: Search
+description: Find archived posts using SQL or full-text search with advanced filtering options
+---
+
+Ayase Quart provides powerful search capabilities for exploring archived content. Two search modes are available: SQL search for exact matching and full-text search (FTS) for faster, more flexible queries.
+
+## Search modes
+
+<CardGroup cols={2}>
+  <Card title="SQL search" icon="database">
+    Exact pattern matching directly against the database. Slower but always current.
+  </Card>
+  <Card title="Full-text search" icon="magnifying-glass">
+    Fast indexed search using LNX, Meilisearch, or Typesense. May have slight data lag.
+  </Card>
+</CardGroup>
+
+## SQL search
+
+SQL search queries the archive database directly for exact matches:
+
+### Features
+
+- **Always current**: Searches live database with no indexing delay
+- **Exact matching**: Finds precise text patterns in posts
+- **Multi-board support**: Configurable single or multi-board searches
+- **Per-board results**: When searching multiple boards, results are paginated per board
+
+### Search fields
+
+<Accordion title="Text fields">
+  - **Comment**: Search within post text
+  - **Subject**: Search within post subjects/titles
+  - **OP Comment**: Find posts in threads where the opening post matches
+  - **OP Subject**: Find posts in threads with matching OP subjects
+  - **Tripcode**: Search by poster tripcode
+  - **Filename**: Search by original media filename
+</Accordion>
+
+<Accordion title="Numeric filters">
+  - **Post Number**: Find specific post by ID
+  - **Comment Length**: Filter by comment character count (`>`, `<`, `=`, `>=`, `<=`)
+  - **Subject Length**: Filter by subject character count
+  - **Media Dimensions**: Filter by image/video width and height
+</Accordion>
+
+<Accordion title="Boolean filters">
+  - **Has File** / **No File**: Filter by media attachment
+  - **Is OP** / **Not OP**: Filter opening posts vs replies
+  - **Is Deleted** / **Not Deleted**: Filter deleted posts
+  - **Is Sticky** / **Not Sticky**: Filter pinned threads
+</Accordion>
+
+<Accordion title="Date range">
+  - **Date After**: Posts on or after this date
+  - **Date Before**: Posts on or before this date
+</Accordion>
+
+### Usage
+
+<Steps>
+  <Step title="Navigate to SQL search">
+    Visit the SQL search page at `/search` (if enabled in configuration)
+  </Step>
+  <Step title="Select boards">
+    Choose one or more boards to search depending on your configuration
+  </Step>
+  <Step title="Enter search terms">
+    Fill in any combination of search fields. All specified filters are combined with AND logic.
+  </Step>
+  <Step title="Submit search">
+    Click the Search button to view results
+  </Step>
+</Steps>
+
+<Note>
+  SQL search has configurable result limits per page. Default maximum is defined in `config.toml` under `vanilla_search.hits_per_page`
+</Note>
+
+## Full-text search (FTS)
+
+FTS provides much faster searches using a dedicated search engine:
+
+### Supported engines
+
+<CardGroup cols={3}>
+  <Card title="LNX" icon="bolt">
+    Fully supported and tested. Based on Tantivy. Best performance.
+  </Card>
+  <Card title="Meilisearch" icon="search">
+    Partial support. Easy setup with good performance.
+  </Card>
+  <Card title="Typesense" icon="gauge">
+    Partial support. Fast with typo tolerance.
+  </Card>
+</CardGroup>
+
+### Query syntax
+
+FTS supports advanced query operators:
+
+```text
+"exact phrase"              # Exact phrase matching
++devices +usb-c -adapter     # Require devices AND usb-c, exclude adapter
+x AND y OR z                 # Boolean operators
+```
+
+<Accordion title="Advanced syntax">
+  Full syntax support depends on the search engine used. LNX provides:
+  - Phrase queries with quotes
+  - Boolean operators: AND, OR, NOT
+  - Required/excluded terms: +term, -term
+  - Field-specific searches
+  - Wildcard patterns
+
+  See [Tantivy query documentation](https://docs.rs/tantivy/0.19.2/tantivy/query/struct.QueryParser.html) for complete details.
+</Accordion>
+
+### Search features
+
+All the same search fields from SQL search are available, plus:
+
+- **Highlighting**: Search terms are highlighted in results (configurable)
+- **Faster results**: Pre-indexed data returns results in milliseconds
+- **Typo tolerance**: Some engines support fuzzy matching
+- **Relevance ranking**: Results are scored by relevance
+
+### Setting up FTS
+
+<Steps>
+  <Step title="Choose a search engine">
+    Select LNX, Meilisearch, or Typesense based on your needs
+  </Step>
+  <Step title="Run the search engine">
+    Use the provided Docker Compose configuration:
+    ```bash
+    cd index_search/lnx/
+    docker compose up -d
+    ```
+  </Step>
+  <Step title="Configure Ayase Quart">
+    Edit `config.toml` to enable index search and set connection details:
+    ```toml
+    [index_search]
+    enabled = true
+    engine = "lnx"
+    host = "localhost"
+    port = 8000
+    ```
+  </Step>
+  <Step title="Create the index">
+    Initialize the search index schema:
+    ```bash
+    ayaseq search index create
+    ```
+  </Step>
+  <Step title="Load data">
+    Populate the index with archived posts:
+    ```bash
+    ayaseq search load full a b c g
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  The initial index load can take time depending on archive size. Progress bars show loading status.
+</Info>
+
+## Gallery mode
+
+Both search modes support gallery mode for media-focused browsing:
+
+<Steps>
+  <Step title="Enable gallery mode">
+    Check the "Gallery Mode" checkbox in the search form
+  </Step>
+  <Step title="Search as normal">
+    Enter your search criteria (automatically filters to posts with media)
+  </Step>
+  <Step title="View results">
+    Results display as a grid of images and videos without post text
+  </Step>
+</Steps>
+
+<Note>
+  Gallery mode automatically enables the "Has File" filter
+</Note>
+
+## Search plugins
+
+Ayase Quart supports custom search plugins to extend functionality:
+
+### Plugin capabilities
+
+- Add custom search fields to the form
+- Pre-filter results before native search
+- Integrate external data sources
+- Implement custom search logic
+
+### Using plugins
+
+Plugins are automatically detected and loaded from:
+- `src/ayase_quart/plugins/search/`
+
+See `search_example.py` for a template plugin implementation.
+
+<Accordion title="Plugin limitations">
+  Search plugins face a "post-filtering" challenge:
+
+  Since plugin filtering happens before native search filtering (for reported posts, deleted posts, etc.), final page sizes can be unpredictable. Plugin results must go through a second round of filtering, which may reduce the number of results below the requested page size.
+
+  **Plugin developers should**:
+  - Return more results than `hits_per_page` when combined with native filters
+  - Document this behavior for users
+  - Consider returning 2-3x the page size for complex filters
+</Accordion>
+
+## Result display
+
+Search results show:
+
+### Standard mode
+
+- **Post metadata**: Number, timestamp, board, thread
+- **Post content**: Subject and comment with formatting
+- **Media**: Thumbnails with click-to-view full size
+- **Thread context**: Link to view post in original thread
+- **Quotelinks**: Clickable references preserved
+- **Highlighting**: Search terms highlighted in text (FTS only, if enabled)
+
+### Gallery mode
+
+- Grid of media thumbnails
+- Click to view full size
+- Link to source thread
+- Media metadata on hover
+
+## Pagination
+
+Search results are paginated for performance:
+
+- Configurable results per page
+- Page navigation controls
+- Total hit count displayed
+- Current page indicator
+- Direct page number links
+
+<Info>
+  Page size limits are configured per search mode in `config.toml`
+</Info>
+
+## Performance considerations
+
+### SQL search performance
+
+- Slower for large archives (millions of posts)
+- Performance depends on database indexes
+- Consider for small archives or when FTS isn't available
+- Results are always current with no lag
+
+### FTS performance
+
+- Very fast even on large archives
+- Requires separate search engine infrastructure
+- Index updates may lag behind scraper by minutes
+- Memory requirements depend on index size
+
+<Note>
+  For production deployments with large archives, FTS is strongly recommended
+</Note>
+
+## Rate limiting
+
+Search endpoints are rate limited to prevent abuse:
+
+- FTS: 5 requests per minute per IP
+- SQL: Configurable limits
+
+Exceeding limits returns a 429 Too Many Requests error.
+
+## API access
+
+Search is also available via API (if enabled):
+
+- Same search parameters as web interface
+- JSON response format
+- Requires API authentication token
+- See API documentation for endpoint details
+
+References:
+- Search handler: `src/ayase_quart/blueprints/web/bp_search.py:24`
+- FTS endpoint: `src/ayase_quart/blueprints/web/bp_search_fts.py:18`
+- Query builder: `src/ayase_quart/search/query.py:12`

@@ -1,0 +1,263 @@
+---
+title: Moderation endpoints
+description: API endpoints for managing user reports and moderation actions
+---
+
+The moderation endpoints allow authenticated users with appropriate permissions to view and manage user reports.
+
+## Authentication
+
+All moderation endpoints require:
+- Valid JWT token in the `Authorization` header
+- User must be active (`is_active = true`)
+- User must have `report_read` permission
+
+<Warning>
+Inactive users or users without proper permissions will receive a 403 Forbidden response.
+</Warning>
+
+## Get reports
+
+```http
+GET /api/v1/reports
+```
+
+Retrieves a paginated list of reports based on filter criteria.
+
+### Query parameters
+
+<ParamField query="public_access" type="string" required>
+  Filter by visibility status:
+  - `v` - Visible posts
+  - `h` - Hidden posts
+</ParamField>
+
+<ParamField query="mod_status" type="string" required>
+  Filter by moderation status:
+  - `o` - Open reports
+  - `c` - Closed reports
+</ParamField>
+
+<ParamField query="board_shortnames" type="string | array" default="all boards">
+  Board(s) to filter by. Can be a single board shortname (1-5 characters) or an array of board shortnames. Defaults to all configured boards.
+</ParamField>
+
+<ParamField query="page_size" type="integer" default="20">
+  Number of reports per page. Must be between 1 and 50.
+</ParamField>
+
+<ParamField query="page_num" type="integer" default="0">
+  Page number (0-indexed). Must be non-negative.
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/reports?public_access=v&mod_status=o&page_size=10&page_num=0" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+<Expandable title="Example request with board filter">
+```bash
+curl -X GET "https://archive.example.com/api/v1/reports?public_access=h&mod_status=c&board_shortnames=g&board_shortnames=tech" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+### Response
+
+Returns an array of report objects matching the filter criteria.
+
+<Expandable title="Example response">
+```json
+[
+  {
+    "report_parent_id": 123,
+    "board": "g",
+    "post_num": 12345678,
+    "public_access": "h",
+    "mod_status": "o",
+    "created_at": "2026-01-15T12:34:56",
+    "submitter_category": "Spam or flooding",
+    "mod_notes": null
+  }
+]
+```
+</Expandable>
+
+## Take action on report
+
+```http
+POST /api/v1/reports/{report_parent_id}
+```
+
+Performs a moderation action on a specific report.
+
+<ParamField path="report_parent_id" type="integer" required>
+  The ID of the report to act upon
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+### Request body
+
+<ParamField body="action" type="string" required>
+  The moderation action to perform:
+  - `report_delete` - Delete the report
+  - `post_delete` - Delete the reported post
+  - `media_delete` - Delete the media file
+  - `media_hide` - Hide the media file
+  - `media_show` - Show the media file
+  - `post_show` - Show the post
+  - `post_hide` - Hide the post
+  - `report_close` - Close the report
+  - `report_open` - Reopen the report
+  - `report_save_notes` - Save moderator notes
+</ParamField>
+
+<ParamField body="mod_notes" type="string | null">
+  Optional moderator notes to attach to the action
+</ParamField>
+
+<Expandable title="Example request">
+```bash
+curl -X POST "https://archive.example.com/api/v1/reports/123" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "post_hide",
+    "mod_notes": "Spam content removed"
+  }'
+```
+</Expandable>
+
+### Response
+
+<ResponseField name="msg" type="string">
+  Success message (status code < 400)
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (status code >= 400)
+</ResponseField>
+
+<Expandable title="Success response (200)">
+```json
+{
+  "msg": "Post hidden successfully"
+}
+```
+</Expandable>
+
+<Expandable title="Error response (404)">
+```json
+{
+  "error": "Report not found"
+}
+```
+</Expandable>
+
+## Bulk actions on reports
+
+```http
+POST /api/v1/reports/bulk
+```
+
+Performs the same moderation action on multiple reports.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+### Request body
+
+<ParamField body="action" type="string" required>
+  The moderation action to perform (see actions list above)
+</ParamField>
+
+<ParamField body="report_parent_ids" type="array" required>
+  Array of report IDs to act upon. Must contain at least one ID. All IDs must be non-negative integers.
+</ParamField>
+
+<ParamField body="mod_notes" type="string | null">
+  Optional moderator notes to attach to all actions
+</ParamField>
+
+<Expandable title="Example request">
+```bash
+curl -X POST "https://archive.example.com/api/v1/reports/bulk" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "report_close",
+    "report_parent_ids": [123, 124, 125],
+    "mod_notes": "Bulk closure - spam cleanup"
+  }'
+```
+</Expandable>
+
+### Response
+
+Returns a results object with the outcome for each report ID.
+
+<ResponseField name="results" type="object">
+  Dictionary mapping report IDs to their individual results, each containing `msg` and `code`.
+</ResponseField>
+
+<Expandable title="All success response (200)">
+```json
+{
+  "123": {
+    "msg": "Report closed",
+    "code": 200
+  },
+  "124": {
+    "msg": "Report closed",
+    "code": 200
+  },
+  "125": {
+    "msg": "Report closed",
+    "code": 200
+  }
+}
+```
+</Expandable>
+
+<Expandable title="Mixed results (207 Multi-Status)">
+```json
+{
+  "123": {
+    "msg": "Report closed",
+    "code": 200
+  },
+  "124": {
+    "msg": "Report not found",
+    "code": 404
+  },
+  "125": {
+    "msg": "Report closed",
+    "code": 200
+  }
+}
+```
+</Expandable>
+
+<Note>
+When results have mixed status codes, the endpoint returns `207 Multi-Status`. If all operations have the same status, that status code is returned.
+</Note>
+
+## Required permissions
+
+All moderation endpoints require the `report_read` permission. Additional permissions may be checked based on the action being performed:
+
+- `report_delete` - Delete reports
+- `report_open` / `report_close` - Change report status
+- `report_save_notes` - Save moderator notes
+- `post_show` / `post_hide` / `post_delete` - Modify posts
+- `media_show` / `media_hide` / `media_delete` - Modify media

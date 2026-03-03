@@ -1,0 +1,482 @@
+---
+title: Admin endpoints
+description: Administrative API endpoints for managing users, viewing latest posts, and accessing configuration
+---
+
+The admin endpoints provide administrative functionality for managing users, viewing system configuration, and accessing latest archived content.
+
+## Authentication
+
+All admin endpoints require:
+- Valid JWT token in the `Authorization` header
+- User must be active (`is_active = true`)
+- User must have specific permissions for each endpoint
+
+<Warning>
+Admin endpoints are powerful and should only be accessible to trusted users. Ensure proper permission configuration.
+</Warning>
+
+## Get latest posts
+
+```http
+GET /api/v1/latest
+```
+
+Retrieves the latest original posts (OPs) across all boards in catalog format.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+**Required permission:** `archive_latest_view`
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/latest" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+### Response
+
+<ResponseField name="catalog" type="array">
+  Array of latest OP posts in catalog format across all configured boards
+</ResponseField>
+
+<Expandable title="Success response (200)">
+```json
+[
+  {
+    "no": 12345678,
+    "board": "g",
+    "now": "01/15/26(Wed)12:34:56",
+    "name": "Anonymous",
+    "sub": "Thread Subject",
+    "com": "Thread content..."
+  }
+]
+```
+</Expandable>
+
+<Expandable title="No data response (404)">
+```json
+{
+  "error": "No data found"
+}
+```
+</Expandable>
+
+## Get configuration
+
+```http
+GET /api/v1/configs
+```
+
+Retrieves moderation-related configuration values.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+**Required permission:** `archive_configs_view`
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/configs" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+### Response
+
+Returns an array of configuration key-value pairs.
+
+<ResponseField name="configs" type="array">
+  Array of configuration objects with `key` and `value` properties
+</ResponseField>
+
+<Expandable title="Example response">
+```json
+[
+  {
+    "key": "hide_post_if_reported",
+    "value": true
+  },
+  {
+    "key": "hide_upstream_deleted_posts",
+    "value": true
+  },
+  {
+    "key": "remove_replies_to_hidden_op",
+    "value": false
+  },
+  {
+    "key": "regex_filter",
+    "value": true
+  },
+  {
+    "key": "path_to_regex_so",
+    "value": "/path/to/regex.so"
+  }
+]
+```
+</Expandable>
+
+## User management
+
+### List all users
+
+```http
+GET /api/v1/users
+```
+
+Retrieves all users in the system.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+**Required permission:** `user_read`
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/users" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+### Response
+
+<ResponseField name="users" type="array">
+  Array of user objects (passwords are redacted)
+</ResponseField>
+
+<Expandable title="Success response (200)">
+```json
+[
+  {
+    "user_id": 1,
+    "username": "admin",
+    "password": "",
+    "is_admin": true,
+    "is_active": true,
+    "permissions": ["user_read", "user_create", "report_read"],
+    "notes": "Primary administrator",
+    "created_at": "2026-01-01T00:00:00",
+    "last_update_at": "2026-01-15T12:34:56"
+  }
+]
+```
+</Expandable>
+
+### Get user by ID
+
+```http
+GET /api/v1/users/{user_id}
+```
+
+Retrieves a specific user by their ID.
+
+<ParamField path="user_id" type="integer" required>
+  The user's unique identifier
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+**Required permission:** `user_read`
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/users/1" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+### Response
+
+<Expandable title="Success response (200)">
+```json
+{
+  "user_id": 1,
+  "username": "admin",
+  "password": "",
+  "is_admin": true,
+  "is_active": true,
+  "permissions": ["user_read", "user_create"],
+  "notes": "Primary administrator",
+  "created_at": "2026-01-01T00:00:00",
+  "last_update_at": "2026-01-15T12:34:56"
+}
+```
+</Expandable>
+
+<Expandable title="User not found (404)">
+```json
+{
+  "error": "User not found"
+}
+```
+</Expandable>
+
+### Create user
+
+```http
+POST /api/v1/users
+```
+
+Creates a new user account.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+**Required permission:** `user_create`
+
+<Warning>
+This endpoint is rate-limited to 6 requests per hour to prevent abuse.
+</Warning>
+
+#### Request body
+
+<ParamField body="username" type="string" required>
+  Username (must not already exist)
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password (will be hashed)
+</ParamField>
+
+<ParamField body="permissions" type="array | null">
+  Array of permission strings. `null` for no permissions.
+</ParamField>
+
+<ParamField body="is_admin" type="boolean" required>
+  Whether the user has admin privileges
+</ParamField>
+
+<ParamField body="is_active" type="boolean" required>
+  Whether the user account is active
+</ParamField>
+
+<ParamField body="notes" type="string | null">
+  Optional notes about the user
+</ParamField>
+
+<Expandable title="Example request">
+```bash
+curl -X POST "https://archive.example.com/api/v1/users" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "moderator",
+    "password": "secure_password",
+    "permissions": ["report_read", "post_hide"],
+    "is_admin": false,
+    "is_active": true,
+    "notes": "New moderator for /g/"
+  }'
+```
+</Expandable>
+
+### Response
+
+<Expandable title="Success response (200)">
+```json
+{
+  "msg": "User 'moderator' created."
+}
+```
+</Expandable>
+
+<Expandable title="Bad request (400)">
+```json
+{
+  "error": "Bad credentials"
+}
+```
+</Expandable>
+
+### Update user
+
+```http
+PUT /api/v1/users/{user_id}
+```
+
+Updates an existing user account.
+
+<ParamField path="user_id" type="integer" required>
+  The user's unique identifier
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+**Required permission:** `user_update`
+
+#### Request body
+
+<ParamField body="username" type="string" required>
+  Username (must match existing user)
+</ParamField>
+
+<ParamField body="password_old" type="string | null">
+  Current password (required if changing password)
+</ParamField>
+
+<ParamField body="password_new" type="string | null">
+  New password (optional)
+</ParamField>
+
+<ParamField body="permissions" type="array | null">
+  Array of permission strings
+</ParamField>
+
+<ParamField body="is_admin" type="boolean" required>
+  Whether the user has admin privileges
+</ParamField>
+
+<ParamField body="is_active" type="boolean" required>
+  Whether the user account is active
+</ParamField>
+
+<ParamField body="notes" type="string | null">
+  Optional notes about the user
+</ParamField>
+
+<Note>
+To change a password, both `password_old` and `password_new` must be provided. The old password is validated before the change.
+</Note>
+
+<Warning>
+The system enforces that at least one active admin must exist. You cannot deactivate or demote the last active admin.
+</Warning>
+
+<Expandable title="Example request">
+```bash
+curl -X PUT "https://archive.example.com/api/v1/users/2" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "moderator",
+    "password_old": null,
+    "password_new": null,
+    "permissions": ["report_read", "post_hide", "post_show"],
+    "is_admin": false,
+    "is_active": true,
+    "notes": "Added post_show permission"
+  }'
+```
+</Expandable>
+
+### Response
+
+<Expandable title="Success response (200)">
+```json
+{
+  "msg": "User updated."
+}
+```
+</Expandable>
+
+<Expandable title="User not found (404)">
+```json
+{
+  "error": "User not found"
+}
+```
+</Expandable>
+
+<Expandable title="Bad credentials (400)">
+```json
+{
+  "error": "Bad credentials"
+}
+```
+</Expandable>
+
+### Delete user
+
+```http
+DELETE /api/v1/users/{user_id}
+```
+
+Deletes a user account.
+
+<ParamField path="user_id" type="integer" required>
+  The user's unique identifier
+</ParamField>
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from the login endpoint
+</ParamField>
+
+**Required permission:** `user_delete`
+
+<Warning>
+The system enforces that at least one active admin must exist. You cannot delete the last active admin.
+</Warning>
+
+<Expandable title="Example request">
+```bash
+curl -X DELETE "https://archive.example.com/api/v1/users/2" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+### Response
+
+<Expandable title="Success response (200)">
+```json
+{
+  "msg": "User 'moderator' deleted."
+}
+```
+</Expandable>
+
+<Expandable title="User not found (404)">
+```json
+{
+  "error": "User not found."
+}
+```
+</Expandable>
+
+<Expandable title="Forbidden (403)">
+```json
+{
+  "error": "User not deleted. There must always be at least one active admin."
+}
+```
+</Expandable>
+
+## Available permissions
+
+Users can be granted the following permissions:
+
+- `user_create` - Create new users
+- `user_read` - View user information
+- `user_update` - Modify existing users
+- `user_delete` - Delete users
+- `report_open` - Open reports
+- `report_close` - Close reports
+- `report_read` - View reports
+- `report_update` - Update reports
+- `report_delete` - Delete reports
+- `report_save_notes` - Save moderator notes on reports
+- `post_show` - Unhide posts
+- `post_hide` - Hide posts
+- `post_delete` - Delete posts
+- `media_hide` - Hide media files
+- `media_show` - Unhide media files
+- `media_delete` - Delete media files
+- `archive_stats_view` - View archive statistics
+- `archive_latest_view` - View latest archived posts
+- `archive_configs_view` - View system configuration
+- `messages_view` - View system messages
+
+<Note>
+Admin users bypass permission checks and have access to all functionality.
+</Note>

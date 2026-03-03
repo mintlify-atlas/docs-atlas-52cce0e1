@@ -1,0 +1,193 @@
+---
+title: Web interface
+description: Explore threads, boards, and catalogs with a familiar 4chan-style interface
+---
+
+The Ayase Quart web interface provides a familiar browsing experience for 4chan and Lainchan archives. It replicates the look and feel of the original imageboards while adding powerful features for navigating archived content.
+
+## Core browsing features
+
+<CardGroup cols={2}>
+  <Card title="Board index" icon="list">
+    Browse threads in chronological order with pagination support
+  </Card>
+  <Card title="Catalog view" icon="grid">
+    See thread previews in a grid layout for quick scanning
+  </Card>
+  <Card title="Thread viewer" icon="comments">
+    Read complete threads with all posts and images preserved
+  </Card>
+  <Card title="Post linking" icon="link">
+    Navigate between quoted posts with automatic quotelink generation
+  </Card>
+</CardGroup>
+
+## Viewing boards
+
+The board index displays threads with their opening posts and recent replies:
+
+<Steps>
+  <Step title="Navigate to a board">
+    Visit `/<board>/` to see the board index (e.g., `/g/` for the technology board)
+  </Step>
+  <Step title="Browse threads">
+    Scroll through threads ordered by last post time. Each thread shows:
+    - Original post with subject, name, and timestamp
+    - Comment text with proper formatting
+    - Attached media (images, videos)
+    - Thread statistics (reply count, image count)
+  </Step>
+  <Step title="Navigate pages">
+    Use pagination controls to browse older threads across multiple pages
+  </Step>
+</Steps>
+
+The pagination displays useful information:
+- Number of threads shown on current page
+- Total thread count for the board
+- Direct links to specific page numbers
+
+## Catalog mode
+
+Catalog view provides a visual overview of all active threads:
+
+<Steps>
+  <Step title="Access catalog">
+    Visit `/<board>/catalog` or click the catalog link from the board index
+  </Step>
+  <Step title="Scan threads">
+    View threads as cards showing:
+    - Thread thumbnail (if available)
+    - Subject and preview text
+    - Reply and image counts
+    - Original post timestamp
+  </Step>
+  <Step title="Open thread">
+    Click any thread card to view the complete thread
+  </Step>
+</Steps>
+
+<Info>
+  Catalog pages display up to 150 threads per page for efficient browsing
+</Info>
+
+## Thread viewing
+
+When viewing a thread, you get the complete archived conversation:
+
+### Post display
+
+Each post includes:
+- **Post number**: Unique identifier for the post
+- **Name and tripcode**: Poster identity information
+- **Timestamp**: When the post was made
+- **Comment**: Formatted text with greentext, links, and quotes
+- **Media**: Full images with thumbnails, filename and hash
+- **Quotelinks**: Clickable references to other posts
+
+### Navigation features
+
+<Accordion title="Quotelink system">
+  Posts that quote other posts display clickable references. Clicking a quotelink:
+  - Highlights the referenced post if it's on the current page
+  - Loads and displays the post in a popup if it's not visible
+  - Shows thread context with backlinks to posts that quote you
+</Accordion>
+
+<Accordion title="Post filtering">
+  When moderation is enabled and posts are reported:
+  - Regular users see reported posts with media hidden
+  - Logged-in moderators can see all posts regardless of status
+  - Post visibility respects moderation settings
+</Accordion>
+
+### Thread statistics
+
+At the top of each thread, statistics display:
+- Total number of replies
+- Total number of images
+- Thread metadata (sticky status, deleted status)
+
+## Media handling
+
+The interface supports various media types:
+
+- **Images**: JPG, PNG, GIF with thumbnail generation
+- **Videos**: WebM and MP4 with poster frames
+- **File metadata**: Original filename, file hash, dimensions, and file size
+
+<Note>
+  Media can be stored locally on the filesystem or in S3-compatible storage
+</Note>
+
+## Authentication states
+
+The interface adapts based on user authentication:
+
+### Anonymous browsing
+- Full read access to archived content
+- Search functionality available
+- Reported posts have media hidden
+
+### Logged in users
+- Access to moderation tools
+- Ability to report posts
+- View reported content
+
+### Administrator access
+- All moderation features
+- Post deletion capabilities
+- User management tools
+
+## Performance optimizations
+
+Ayase Quart implements several optimizations for fast page loads:
+
+- **Template optimization**: Posts are pre-rendered and cached
+- **Efficient queries**: Database queries are optimized for the Asagi schema
+- **Pagination**: Large result sets are paginated to reduce load times
+- **Filter caching**: Moderation filters are cached in Redis or SQLite
+
+<Info>
+  Performance metrics are logged during development to identify bottlenecks in rendering pipelines
+</Info>
+
+## Customization
+
+### Themes
+
+The interface uses CSS themes. By default, the Tomorrow theme is included:
+- Tomorrow (default)
+- Custom themes can be added by modifying `static/css/custom.css`
+
+### Branding
+
+Instance operators can customize:
+- Site name and title
+- Logo images
+- Footer links and attribution
+
+<Note>
+  Per the AGPL license, references to Ayase Quart should remain visible
+</Note>
+
+## Mobile support
+
+The web interface is responsive and works on mobile devices:
+- Adaptive layouts for small screens
+- Touch-friendly controls
+- Optimized image loading
+
+## Static files
+
+The interface serves several important static assets:
+
+- `favicon.ico` / `favicon.gif`: Site icon
+- `robots.txt`: Configurable robot access control
+- JavaScript for interactive features
+- CSS stylesheets for theming
+
+References:
+- Board index route: `src/ayase_quart/blueprints/web/bp_app.py:89`
+- Thread view route: `src/ayase_quart/blueprints/web/bp_app.py:282`
+- Catalog route: `src/ayase_quart/blueprints/web/bp_app.py:202`

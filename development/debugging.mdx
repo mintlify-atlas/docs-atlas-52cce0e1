@@ -1,0 +1,343 @@
+---
+title: Debugging
+description: Debugging Ayase Quart during development
+---
+
+## Development environment setup
+
+Before debugging, ensure you have a proper development environment configured with your virtualenv activated and all dependencies installed.
+
+### Requirements
+
+- Python 3.12.x or 3.13.x
+- SQLite 3.35.0+ (recommended: 3.47.0)
+- Redis (optional, for moderation features)
+- A configured `config.toml` and `boards.toml`
+
+## VS Code debugging
+
+The recommended way to debug Ayase Quart is using VS Code with the Python debugger.
+
+### Launch configuration
+
+Create `.vscode/launch.json` with the following configuration:
+
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "AQ Debug",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "hypercorn",
+            "cwd": "path/to/ayase-quart",
+            "env": {
+            },
+            "args": [
+                "-w",
+                "2",
+                "-b",
+                "127.0.0.1:9001",
+                "src/ayase_quart.main:app"
+            ],
+            "autoStartBrowser": true,
+            "justMyCode": true,
+        }
+    ]
+}
+```
+
+<Note>
+  Replace `path/to/ayase-quart` with the actual path to your Ayase Quart installation.
+</Note>
+
+### Using the debugger
+
+<Steps>
+  <Step title="Set breakpoints">
+    Click in the gutter next to line numbers in VS Code to set breakpoints
+  </Step>
+
+  <Step title="Start debugging">
+    Press F5 or select "Run → Start Debugging" from the menu
+  </Step>
+
+  <Step title="Interact with the application">
+    Your browser should automatically open to `http://127.0.0.1:9001`
+  </Step>
+
+  <Step title="Debug execution">
+    When code hits a breakpoint, use the debug toolbar to:
+    - Step over (F10)
+    - Step into (F11)  
+    - Step out (Shift+F11)
+    - Continue (F5)
+    - Inspect variables in the debug sidebar
+  </Step>
+</Steps>
+
+## Running without debugger
+
+For quick testing without the debugger, you can run Ayase Quart directly:
+
+### Development server
+
+```bash
+hypercorn -w 2 -b 127.0.0.1:9001 ayase_quart.main:app
+```
+
+This launches Hypercorn with:
+- `-w 2` - 2 worker processes
+- `-b 127.0.0.1:9001` - Bind to localhost port 9001
+
+### Configuration-based launch
+
+You can also use a Hypercorn configuration file:
+
+```bash
+# Using Python config
+hypercorn --config file:/path/to/hypercorn.tpl.py ayase_quart.main:app
+
+# Using TOML config
+hypercorn --config hypercorn.tpl.toml ayase_quart.main:app
+```
+
+See the [Hypercorn documentation](https://hypercorn.readthedocs.io/en/latest/how_to_guides/configuring.html) for all configuration options.
+
+## Development mode features
+
+### Auto-reload
+
+Enable auto-reload in `config.toml` to automatically restart the server when code changes:
+
+```toml
+[app]
+autoreload = true
+```
+
+<Info>
+  Auto-reload is useful during development but should be disabled in production.
+</Info>
+
+### Disabling asset integrity checks
+
+During active development with frequent JavaScript changes, you can disable integrity checks:
+
+```bash
+# Empty the asset hashes file
+echo "{}" > asset_hashes.json
+
+# Or delete it entirely
+rm asset_hashes.json
+```
+
+This prevents script integrity errors while editing JavaScript files. Remember to run `ayaseq prep hashjs` before deploying.
+
+### Testing mode
+
+Set testing mode in configuration to show detailed error messages:
+
+```toml
+[app]
+testing = true
+```
+
+In testing mode, full exception details are displayed in the browser instead of generic error messages.
+
+## Logging and debugging output
+
+### Application logs
+
+Ayase Quart logs important events to stdout. When running in development, you'll see:
+
+```
+Loading search plugin: plugins.search.search_example
+Loading bp plugin: plugins.blueprints.bp_example
+Quart app initialized in production mode.
+```
+
+### Database debugging
+
+To debug database queries, you can add print statements in the query runners:
+
+```python
+# Temporarily add to db/mysql.py or db/sqlite.py
+async def run_query(self, query, params=None):
+    print(f"Query: {query}")
+    print(f"Params: {params}")
+    # ... rest of method
+```
+
+<Note>
+  Remove debug print statements before committing code.
+</Note>
+
+## Common debugging scenarios
+
+### Debugging routes
+
+Set breakpoints in blueprint files under `blueprints/web/` or `blueprints/api/`:
+
+```python
+# blueprints/web/bp_app.py
+@bp.route('/<board>/')
+async def board_index(board):
+    # Set breakpoint here
+    posts = await get_board_posts(board)
+    return await render_template('board.html', posts=posts)
+```
+
+### Debugging database queries
+
+Set breakpoints in `db/` module files to inspect query execution:
+
+```python
+# db/__init__.py
+async def query_dict(self, query: str, params=None):
+    # Set breakpoint here to inspect queries
+    return await self.query_runner.run_query(query, params=params)
+```
+
+### Debugging templates
+
+Add debug output in Jinja2 templates:
+
+```html
+<!-- templates/board.html -->
+{{ debug(posts) }}  <!-- Dumps variable content -->
+```
+
+### Debugging plugins
+
+Check plugin loading by watching stdout during startup. If plugins aren't loading:
+
+1. Verify plugin files are in `plugins/search/` or `plugins/blueprints/`
+2. Check that plugins implement the correct interface
+3. Ensure plugin configuration is enabled in `config.toml`
+
+## Testing
+
+### Running tests
+
+Ayase Quart includes a test suite. Run tests with pytest:
+
+```bash
+python -m pytest
+```
+
+### Test configuration
+
+Tests are configured in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+testpaths = ['tests']
+pythonpath = 'src'
+```
+
+### Writing tests
+
+Add test files to the `tests/` directory. See existing tests in:
+- `tests/unit/` - Unit tests
+- `src/ayase_quart/tests/` - Integration tests
+
+## Troubleshooting
+
+### Database connection errors
+
+**MySQL access denied error**:
+
+```sql
+DROP User 'myuser'@'localhost';
+DROP User 'myuser'@'%';
+CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';
+GRANT ALL PRIVILEGES ON * . * TO 'myuser'@'%';
+```
+
+Then restart MySQL:
+```bash
+sudo systemctl restart mysql
+sudo systemctl status mysql
+```
+
+### Port already in use
+
+If port 9001 is already in use:
+
+```bash
+# Find the process
+sudo lsof -i :9001
+
+# Kill it
+sudo kill -9 <PID>
+
+# Or use a different port
+hypercorn -b 127.0.0.1:9002 ayase_quart.main:app
+```
+
+### Import errors
+
+If you encounter import errors, ensure:
+1. Virtual environment is activated
+2. Package is installed: `python -m pip install .`
+3. PYTHONPATH includes `src/` directory
+
+### Redis connection errors
+
+If moderation features fail:
+
+```bash
+# Check Redis status
+sudo systemctl status redis
+
+# Start Redis if not running
+sudo systemctl start redis
+
+# Or disable moderation in config.toml
+[moderation]
+enabled = false
+```
+
+## Performance profiling
+
+### Memory profiling
+
+Use memory profiler to identify memory leaks:
+
+```bash
+python -m pip install memory-profiler
+python -m memory_profiler ayase_quart/main.py
+```
+
+### Request profiling
+
+Add timing decorators to routes to measure performance:
+
+```python
+import time
+from functools import wraps
+
+def timer(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        start = time.time()
+        result = await func(*args, **kwargs)
+        print(f"{func.__name__} took {time.time() - start:.2f}s")
+        return result
+    return wrapper
+
+@bp.route('/<board>/')
+@timer
+async def board_index(board):
+    # ... route logic
+```
+
+## Getting help
+
+If you encounter issues:
+
+1. Check the [GitHub issues](https://github.com/sky-cake/ayase-quart/issues)
+2. Review the README.md for common setup problems
+3. Enable testing mode for detailed error messages
+4. Add logging to isolate the problem area

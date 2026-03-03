@@ -1,0 +1,289 @@
+---
+title: Media configuration
+description: Configure image and thumbnail serving for archived posts
+---
+
+Ayase Quart can serve media files (images, thumbnails, videos) from archives. The `[media]` section controls how media is accessed and delivered.
+
+## Basic media URIs
+
+Define the base URIs for images and thumbnails:
+
+<ParamField path="image_uri" type="string" required>
+  Base URI for full-size images. Must contain `{board}` placeholder.
+  
+  Set to empty string (`''`) to disable image serving entirely.
+  
+  **Example:** `https://192.168.1.16:9001/static/ritual/{board}/image`
+</ParamField>
+
+<ParamField path="thumb_uri" type="string" required>
+  Base URI for thumbnail images. Must contain `{board}` placeholder.
+  
+  Set to empty string (`''`) to disable thumbnail serving entirely.
+  
+  **Example:** `https://192.168.1.16:9001/static/ritual/{board}/thumb`
+</ParamField>
+
+```toml
+[media]
+image_uri = "https://192.168.1.16:9001/static/ritual/{board}/image"
+thumb_uri = "https://192.168.1.16:9001/static/ritual/{board}/thumb"
+```
+
+<Note>
+  The `{board}` placeholder is replaced with the actual board shortname at runtime.
+</Note>
+
+## Serving media outside static path
+
+By default, media is served from the Quart app's static directory (`/path/to/ayase_quart/src/static`). You can serve media from other filesystem locations.
+
+<ParamField path="serve_outside_static" type="boolean" default="false">
+  Enable serving media files from outside the application's static directory
+</ParamField>
+
+<ParamField path="media_root_path" type="string" default="">
+  Full path to the root media directory on your server.
+  
+  **Example:** If images are at `/mnt/dl/<board>/image`, set this to `/mnt/dl`
+</ParamField>
+
+<ParamField path="endpoint" type="string" default="/srv/media">
+  URL endpoint prefix for serving media. Content will be served at `/<endpoint>/<board>/image`.
+  
+  **Example:** `/srv/media` serves from `/srv/media/{board}/image`
+</ParamField>
+
+<ParamField path="valid_extensions" type="array" default="['jpg', 'jpeg', 'png', 'gif', 'webm', 'mp4']">
+  Only serve files with these extensions from outside the static path. Security measure to prevent serving arbitrary files.
+</ParamField>
+
+### Configuration example
+
+```toml
+[media]
+serve_outside_static = true
+media_root_path = '/mnt/archive/media'
+endpoint = '/srv/media'
+valid_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webm', 'mp4']
+
+# Update URIs to use the custom endpoint
+image_uri = "/srv/media/{board}/image"
+thumb_uri = "/srv/media/{board}/thumb"
+```
+
+<Warning>
+  Ensure `media_root_path` has proper permissions and only contains files you want to serve publicly.
+</Warning>
+
+## Per-board media control
+
+You can restrict which boards serve images or thumbnails using whitelists:
+
+<ParamField path="boards_with_image" type="string" default="">
+  Comma-separated list of board shortnames that serve full images.
+  
+  - Empty string (`''`) - All boards serve images (default)
+  - Specific boards - Only listed boards serve images
+  
+  **Example:** `'a,g,v'` - Only /a/, /g/, and /v/ serve images
+</ParamField>
+
+<ParamField path="boards_with_thumb" type="string" default="">
+  Comma-separated list of board shortnames that serve thumbnails.
+  
+  - Empty string (`''`) - All boards serve thumbnails (default)
+  - Specific boards - Only listed boards serve thumbnails
+  
+  **Example:** `'a,g,v,tv'` - Only /a/, /g/, /v/, and /tv/ serve thumbnails
+</ParamField>
+
+### Example configurations
+
+<CodeGroup>
+```toml All boards serve media
+[media]
+image_uri = "https://archive.example.com/{board}/image"
+thumb_uri = "https://archive.example.com/{board}/thumb"
+boards_with_image = ''  # All boards
+boards_with_thumb = ''  # All boards
+```
+
+```toml No boards serve media
+[media]
+image_uri = ''  # Disabled
+thumb_uri = ''  # Disabled
+```
+
+```toml Selective boards
+[media]
+image_uri = "https://archive.example.com/{board}/image"
+thumb_uri = "https://archive.example.com/{board}/thumb"
+boards_with_image = 'a,g,v,pol'  # Only these boards
+boards_with_thumb = 'a,g,v,pol,tv,co'  # These boards have thumbs
+```
+</CodeGroup>
+
+## Nginx sendfile optimization
+
+For production deployments, use Nginx's `sendfile()` to serve media efficiently without loading files into application memory.
+
+<ParamField path="use_nginx_sendfile" type="boolean" default="false">
+  Enable Nginx X-Accel-Redirect for efficient media serving
+</ParamField>
+
+<ParamField path="nginx_x_accel_redirect_path" type="string" default="">
+  Internal Nginx location path for X-Accel-Redirect.
+  
+  **Example:** `/x_accel_redirect1`
+</ParamField>
+
+### Nginx configuration
+
+1. Configure Ayase Quart:
+
+```toml
+[media]
+use_nginx_sendfile = true
+nginx_x_accel_redirect_path = '/x_accel_redirect1'
+image_uri = "https://archive.example.com/{board}/image"
+thumb_uri = "https://archive.example.com/{board}/thumb"
+```
+
+2. Add to your Nginx server block:
+
+```nginx
+location /x_accel_redirect1/ {
+    internal;
+    alias /;  # Root media directory
+    sendfile on;
+    sendfile_max_chunk 1m;
+    tcp_nopush on;
+}
+```
+
+<Accordion title="How X-Accel-Redirect works">
+  1. User requests a media file from Ayase Quart
+  2. Ayase Quart sends an X-Accel-Redirect header to Nginx with the file path
+  3. Nginx serves the file directly using `sendfile()`, bypassing application memory
+  4. Result: Lower memory usage, better performance, reduced application load
+</Accordion>
+
+<Note>
+  The `internal` directive ensures the X-Accel-Redirect location cannot be accessed directly by users.
+</Note>
+
+## Media serving strategies
+
+<Tabs>
+  <Tab title="Local development">
+    ```toml
+    [media]
+    image_uri = "http://127.0.0.1:9001/static/{board}/image"
+    thumb_uri = "http://127.0.0.1:9001/static/{board}/thumb"
+    serve_outside_static = false
+    ```
+    
+    Media served directly from application's static directory.
+  </Tab>
+  
+  <Tab title="CDN deployment">
+    ```toml
+    [media]
+    image_uri = "https://cdn.archive.example.com/{board}/image"
+    thumb_uri = "https://cdn.archive.example.com/{board}/thumb"
+    serve_outside_static = false
+    ```
+    
+    Media served from external CDN. Application doesn't serve media files.
+  </Tab>
+  
+  <Tab title="Nginx reverse proxy">
+    ```toml
+    [media]
+    image_uri = "https://archive.example.com/{board}/image"
+    thumb_uri = "https://archive.example.com/{board}/thumb"
+    serve_outside_static = true
+    media_root_path = '/mnt/archive'
+    use_nginx_sendfile = true
+    nginx_x_accel_redirect_path = '/x_accel'
+    ```
+    
+    Optimal for production with Nginx frontend.
+  </Tab>
+  
+  <Tab title="Network storage">
+    ```toml
+    [media]
+    image_uri = "https://archive.example.com/media/{board}/image"
+    thumb_uri = "https://archive.example.com/media/{board}/thumb"
+    serve_outside_static = true
+    media_root_path = '/mnt/nas/archive'
+    endpoint = '/media'
+    valid_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webm', 'mp4']
+    ```
+    
+    Serve from NAS or network-mounted storage.
+  </Tab>
+</Tabs>
+
+## Security considerations
+
+<AccordionGroup>
+  <Accordion title="File extension validation">
+    The `valid_extensions` setting prevents serving arbitrary files when using `serve_outside_static`.
+    
+    ```toml
+    valid_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webm', 'mp4']
+    ```
+    
+    Only files with these extensions can be served from outside the static path.
+  </Accordion>
+  
+  <Accordion title="Filesystem permissions">
+    - Media directories should be readable by the application user
+    - Avoid write permissions unless necessary
+    - Use dedicated user account for the application
+    - Example: `chown -R ayase:ayase /mnt/archive`
+  </Accordion>
+  
+  <Accordion title="Path traversal prevention">
+    Ayase Quart validates file paths to prevent directory traversal attacks. The `{board}` placeholder is sanitized and validated against your boards configuration.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Images not loading">
+    - Verify `image_uri` and `thumb_uri` are not empty strings
+    - Check board is in `boards_with_image` / `boards_with_thumb` if using whitelists
+    - Ensure media files exist at the expected paths
+    - Check filesystem permissions allow read access
+    - Review browser console for 404 or 403 errors
+  </Accordion>
+  
+  <Accordion title="404 errors with serve_outside_static">
+    - Verify `media_root_path` is correct
+    - Check file extensions match `valid_extensions`
+    - Ensure board directories exist at `{media_root_path}/{board}/`
+    - Verify endpoint configuration matches URI patterns
+  </Accordion>
+  
+  <Accordion title="Nginx sendfile not working">
+    - Verify Nginx location block is configured correctly
+    - Check `internal` directive is present
+    - Ensure `alias` path matches your media root
+    - Review Nginx error logs for details
+    - Test with `use_nginx_sendfile = false` first
+  </Accordion>
+  
+  <Accordion title="Slow media serving">
+    - Enable Nginx sendfile for production
+    - Consider using a CDN for large archives
+    - Check network latency if using network storage
+    - Monitor disk I/O performance
+    - Verify `sendfile_max_chunk` is appropriate
+  </Accordion>
+</AccordionGroup>

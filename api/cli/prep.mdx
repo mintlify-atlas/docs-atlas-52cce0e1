@@ -1,0 +1,182 @@
+---
+title: prep commands
+description: Prepare your Ayase Quart system for launch with configuration and setup commands
+---
+
+The `prep` command group handles system preparation tasks that should be run before launching Ayase Quart for the first time, or after configuration changes.
+
+## Usage
+
+```bash
+python -m ayase_quart prep <subcommand>
+```
+
+## Subcommands
+
+### secret
+
+Generate a secure secret key in your `config.toml` file. This replaces the default placeholder `DEFAULT_CHANGE_ME` with a cryptographically secure 48-character hexadecimal string.
+
+```bash
+python -m ayase_quart prep secret
+```
+
+**Output:**
+```
+a1b2c3d4e5f6789012345678901234567890abcdef123456
+```
+
+<Note>
+  The new secret will be automatically written to your config file. The original value must be `DEFAULT_CHANGE_ME` or the command will report "No default secret found".
+</Note>
+
+**Use cases:**
+- Initial system setup
+- Rotating security credentials
+- After cloning the repository
+
+**Implementation details:**
+- Uses Python's `secrets.token_hex(24)` for cryptographic randomness (src/ayase_quart/cli/prep_cli.py:40)
+- Performs in-place replacement in the config file
+- Prints the new secret for your records
+
+---
+
+### hashjs
+
+Generate SHA-384 integrity hashes for all JavaScript files in the static directory. Creates or updates `asset_hashes.json` for Content Security Policy (CSP) enforcement.
+
+```bash
+python -m ayase_quart prep hashjs
+```
+
+**Output:**
+```
+Scanning JS directory: /path/to/ayase_quart/static/js
+```
+
+The command creates `asset_hashes.json` with contents like:
+
+```json
+{
+    "script.js": "sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/ux",
+    "main.js": "sha384-B2yPHKaXnvFWtRChIbabYbUO61SD1..."
+}
+```
+
+**Use cases:**
+- After modifying JavaScript files
+- During deployment preparation
+- When enabling strict CSP policies
+
+**Implementation details:**
+- Recursively scans all `.js` files in `static/js/` (src/ayase_quart/cli/prep_cli.py:46)
+- Uses SHA-384 hashing with base64 encoding
+- Output file location: `cli/asset_hashes.json`
+
+---
+
+### boards
+
+Validate that all boards defined in your `boards.toml` configuration exist in the database. Creates missing boards if needed.
+
+```bash
+python -m ayase_quart prep boards
+```
+
+**Output:**
+```
+ok
+```
+
+**Use cases:**
+- After adding new boards to `boards.toml`
+- Initial database setup
+- Verifying database schema integrity
+
+**Implementation details:**
+- Calls `validate_boards_in_db()` from the boards module (src/ayase_quart/cli/prep_cli.py:51-52)
+- Ensures database schema matches configuration
+- Non-destructive operation (only adds missing boards)
+
+---
+
+### filtercache
+
+Populate the moderation filter cache. This preloads filtering rules into memory for faster moderation decisions.
+
+```bash
+python -m ayase_quart prep filtercache
+```
+
+<Note>
+  This command only has effect if moderation filtering is enabled in your configuration.
+</Note>
+
+**Use cases:**
+- After updating moderation filter rules
+- Initial system setup with moderation enabled
+- Performance optimization
+
+**Implementation details:**
+- Runs asynchronously using `asyncio.run()` (src/ayase_quart/cli/prep_cli.py:56-57)
+- Calls `fc._create_cache()` from the moderation module
+- Cache contents depend on your moderation configuration
+
+## Complete setup workflow
+
+<Steps>
+  <Step title="Generate secret">
+    ```bash
+    python -m ayase_quart prep secret
+    ```
+    Secure your installation with a unique secret key.
+  </Step>
+  
+  <Step title="Hash JavaScript">
+    ```bash
+    python -m ayase_quart prep hashjs
+    ```
+    Enable CSP protection for your static assets.
+  </Step>
+  
+  <Step title="Initialize boards">
+    ```bash
+    python -m ayase_quart prep boards
+    ```
+    Ensure all configured boards exist in the database.
+  </Step>
+  
+  <Step title="Build filter cache (optional)">
+    ```bash
+    python -m ayase_quart prep filtercache
+    ```
+    Preload moderation filters if enabled.
+  </Step>
+</Steps>
+
+## Error handling
+
+| Scenario | Output | Action |
+|----------|--------|--------|
+| Config file not found | Exception printed | Check `CONF_FILE` path in logs |
+| Default secret not found | `No default secret found` | Secret already changed or invalid config |
+| No JS files found | Empty `asset_hashes.json` | Verify `static/js/` directory exists |
+
+## File locations
+
+<ParamField path="config.toml" type="file">
+  Main configuration file where the secret is stored
+</ParamField>
+
+<ParamField path="boards.toml" type="file">
+  Board definitions that are validated against the database
+</ParamField>
+
+<ParamField path="cli/asset_hashes.json" type="file">
+  Generated file containing JavaScript integrity hashes
+</ParamField>
+
+<ParamField path="static/js/" type="directory">
+  Source directory for JavaScript files to be hashed
+</ParamField>

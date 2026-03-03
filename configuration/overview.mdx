@@ -1,0 +1,213 @@
+---
+title: Configuration overview
+description: Understanding Ayase Quart's configuration system and core settings
+---
+
+Ayase Quart uses TOML configuration files to manage application settings, database connections, and board configurations.
+
+## Configuration files
+
+Ayase Quart requires two main configuration files:
+
+- **config.toml** - Main application configuration including app settings, database connections, media serving, search engines, and moderation
+- **boards.toml** - Board definitions mapping board shortnames to full names
+
+Template files are provided as `config.tpl.toml` and `boards.[archive].tpl.toml` (e.g., `boards.4chan.tpl.toml` or `boards.lainchan.tpl.toml`).
+
+## Application settings
+
+Core application configuration is defined in the `[app]` section.
+
+<ParamField path="testing" type="boolean" default="false">
+  Enable testing mode
+</ParamField>
+
+<ParamField path="secret" type="string" default="DEFAULT_CHANGE_ME" required>
+  Application secret key used for session management and security. Generate a secure value using:
+  
+  ```bash
+  python -c "import secrets as s; print(s.token_hex(24))"
+  ```
+  
+  <Warning>Always change the default secret in production environments</Warning>
+</ParamField>
+
+<ParamField path="validate_boards_db" type="boolean" default="true">
+  Validate that boards defined in boards.toml have corresponding database tables
+</ParamField>
+
+<ParamField path="autoreload" type="boolean" default="false">
+  Enable automatic code reloading during development
+</ParamField>
+
+<ParamField path="api" type="boolean" default="false">
+  Serve JSON API endpoints including catalog.json, thread.json, and index.json
+</ParamField>
+
+<ParamField path="url" type="string" default="http://127.0.0.1:9001" required>
+  The base URL for your application, including protocol and domain/IP. Everything before the paths and query strings.
+  
+  **Examples:**
+  - `http://127.0.0.1:9001` (local development)
+  - `https://192.168.1.100` (local network)
+  - `https://ayasequart.com` (production)
+</ParamField>
+
+<ParamField path="port" type="integer" default="9001">
+  Port number for the application to listen on
+</ParamField>
+
+<ParamField path="ssl_key" type="string">
+  Path to SSL private key file (e.g., `key.pem`). Optional, comment out if not using SSL.
+</ParamField>
+
+<ParamField path="ssl_cert" type="string">
+  Path to SSL certificate file (e.g., `cert.pem`). Optional, comment out if not using SSL.
+</ParamField>
+
+<ParamField path="proxy_trusted_hops" type="integer" default="0">
+  Number of trusted proxy hops for X-Forwarded-For header processing. Set to the number of reverse proxies in front of the application.
+</ParamField>
+
+<ParamField path="rate_limiter" type="boolean" default="true">
+  Enable rate limiting on endpoints. All rates are currently hard coded.
+</ParamField>
+
+<ParamField path="allow_robots" type="boolean" default="false">
+  Control whether web crawlers can crawl your site via robots.txt
+</ParamField>
+
+<ParamField path="login_endpoint" type="string" default="/login">
+  Custom endpoint path for the login page. Can be changed to increase security through obscurity.
+</ParamField>
+
+## Site settings
+
+The `[site]` section controls site appearance and identity.
+
+<ParamField path="name" type="string" default="Ayase Quart">
+  Display name for your archive site
+</ParamField>
+
+<ParamField path="theme" type="string" default="tomorrow">
+  Visual theme for the site interface
+  
+  **Available themes:**
+  - `tomorrow`
+  - `yotsuba`
+  - `yotsuba_b`
+  - `futaba`
+  - `burichan`
+  - `photon`
+</ParamField>
+
+<ParamField path="site_email" type="string" default="">
+  Contact email address displayed on the site
+</ParamField>
+
+<ParamField path="anonymous_username" type="string" default="Anonymous">
+  Default username displayed for posts without a name
+</ParamField>
+
+<ParamField path="custom_banner" type="string">
+  Custom HTML banner message displayed on the site. Set to empty string (`''`) to disable, or leave as `None` for default promo banner.
+</ParamField>
+
+## Archive settings
+
+The `[archive]` section defines the source archive type and behavior.
+
+<ParamField path="type" type="string" default="yotsuba" required>
+  Archive type/format
+  
+  **Options:**
+  - `yotsuba` - 4chan format
+  - `vichan` - Lainchan, Holotower format
+</ParamField>
+
+<ParamField path="canonical_name" type="string" default="4chan" required>
+  Human-readable name of the source archive
+  
+  **Examples:**
+  - `4chan`
+  - `Lainchan`
+  - `Holotower`
+</ParamField>
+
+<ParamField path="canonical_host" type="string" default="https://boards.4chan.org" required>
+  Base URL of the canonical source archive
+</ParamField>
+
+<ParamField path="comments_preescaped" type="boolean" default="false">
+  Whether comment HTML is pre-escaped in the source data
+  
+  - `false` - For 4chan scrapers
+  - `true` - For vichan APIs
+</ParamField>
+
+<ParamField path="catalog_path" type="string" default="/catalog">
+  URL path pattern for catalog pages after `/{board}`. Default is `/catalog`.
+  
+  **Example:** `/catalog.html`
+</ParamField>
+
+<ParamField path="thread_path" type="string" default="/thread/{thread}">
+  URL path pattern for thread pages after `/{board}`. Use `{thread}` as placeholder.
+  
+  **Example:** `/res/{thread}.html`
+</ParamField>
+
+<ParamField path="post_path" type="string" default="#p{num}">
+  URL fragment pattern for individual posts after thread_path. Use `{num}` as placeholder.
+  
+  **Example:** `#{num}`
+</ParamField>
+
+## Statistics
+
+The `[stats]` section controls statistics collection and display.
+
+<ParamField path="enabled" type="boolean" default="true">
+  Enable endpoints for viewing post statistics (posts per month per board)
+</ParamField>
+
+<ParamField path="redis" type="boolean" default="true">
+  Use Redis for statistics caching
+</ParamField>
+
+<ParamField path="redis_db" type="integer" default="2">
+  Redis database number for statistics data
+</ParamField>
+
+## Redis connection
+
+The `[redis]` section configures the Redis connection used for caching and statistics.
+
+<ParamField path="host" type="string" default="127.0.0.1">
+  Redis server hostname or IP address
+</ParamField>
+
+<ParamField path="port" type="integer" default="6379">
+  Redis server port
+</ParamField>
+
+<ParamField path="max_connections" type="integer" default="1000">
+  Maximum number of connections in the pool. Ensure your system's max open files limit is high enough (check with `ulimit`).
+</ParamField>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Database configuration" icon="database" href="/configuration/database">
+    Configure MySQL, PostgreSQL, or SQLite connections
+  </Card>
+  <Card title="Board configuration" icon="table-cells" href="/configuration/boards">
+    Set up board definitions and mappings
+  </Card>
+  <Card title="Media serving" icon="image" href="/configuration/media">
+    Configure image and thumbnail serving
+  </Card>
+  <Card title="Search engines" icon="magnifying-glass" href="/configuration/search-engines">
+    Set up vanilla and indexed search
+  </Card>
+</CardGroup>

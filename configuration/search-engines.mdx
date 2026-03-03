@@ -1,0 +1,407 @@
+---
+title: Search engine configuration
+description: Configure vanilla search, indexed search engines (Lnx, Meilisearch, Typesense), and search plugins
+---
+
+Ayase Quart supports multiple search methods: vanilla database search, indexed search engines, and custom search plugins.
+
+## Vanilla search
+
+Vanilla search queries the database directly without an index. Best for smaller archives or when you don't want to run a separate search service.
+
+<ParamField path="enabled" type="boolean" default="true">
+  Enable vanilla database search
+</ParamField>
+
+<ParamField path="highlight" type="boolean" default="false">
+  Highlight matching terms in search results
+</ParamField>
+
+<ParamField path="hits_per_page" type="integer" default="50">
+  Number of results per page
+</ParamField>
+
+<ParamField path="max_hits" type="integer" default="1000">
+  Maximum total results to return (with underscores: `1_000`)
+</ParamField>
+
+<ParamField path="multi_board_search" type="boolean" default="false">
+  Allow searching across multiple boards simultaneously
+</ParamField>
+
+```toml
+[vanilla_search]
+enabled = true
+highlight = false
+hits_per_page = 50
+max_hits = 1_000
+multi_board_search = false
+```
+
+<Note>
+  Vanilla search may be slow on large archives. Consider using indexed search for better performance.
+</Note>
+
+## Indexed search
+
+Indexed search uses a dedicated search engine for fast full-text search. Supports Lnx, Meilisearch, and Typesense.
+
+### Base configuration
+
+<ParamField path="enabled" type="boolean" default="true">
+  Enable indexed search
+</ParamField>
+
+<ParamField path="highlight" type="boolean" default="false">
+  Highlight matching terms in search results
+</ParamField>
+
+<ParamField path="hits_per_page" type="integer" default="50">
+  Number of results per page
+</ParamField>
+
+<ParamField path="max_hits" type="integer" default="1000">
+  Maximum total results to return (with underscores: `1_000`)
+</ParamField>
+
+<ParamField path="provider" type="string" default="lnx" required>
+  Search engine provider
+  
+  **Options:**
+  - `lnx`
+  - `meili` (Meilisearch)
+  - `typesense`
+</ParamField>
+
+<ParamField path="host" type="string" default="http://localhost:8000" required>
+  Search engine host URL. Should be a LAN IP address (e.g., `192.168.1.122`) rather than `localhost` or a domain name for better performance.
+</ParamField>
+
+<ParamField path="headers" type="object" required>
+  HTTP headers for search engine API requests, including authentication.
+  
+  **Example:**
+  ```toml
+  headers = { content-type = 'application/json', Authorization = 'password' }
+  ```
+</ParamField>
+
+<ParamField path="version" type="string" default="1">
+  API version (only matters for Quickwit)
+</ParamField>
+
+<ParamField path="multi_board_search" type="boolean" default="true">
+  Allow searching across multiple boards simultaneously
+</ParamField>
+
+```toml
+[index_search]
+enabled = true
+highlight = false
+hits_per_page = 50
+max_hits = 1_000
+provider = 'lnx'
+host = 'http://192.168.1.122:8000'
+headers = { content-type = 'application/json', Authorization = 'your-api-key' }
+version = '1'
+multi_board_search = true
+```
+
+## Lnx configuration
+
+Lnx is a fast, embeddable full-text search engine. The `[index_search.lnx]` section provides Lnx-specific settings.
+
+<ParamField path="max_concurrency" type="integer" default="4">
+  Maximum concurrent search queries. Good range: 4-16.
+  
+  - **Lower values** (4-8): Better for larger datasets, prevents I/O and lock contention
+  - **Higher values** (12-16): Better for scaling requests/second on smaller datasets
+</ParamField>
+
+<ParamField path="reader_threads" type="integer" default="8">
+  Number of reader threads. Set to number of vCPUs available.
+</ParamField>
+
+<ParamField path="writer_threads" type="integer" default="8">
+  Number of writer threads. Set to number of vCPUs available.
+</ParamField>
+
+<ParamField path="writer_buffer" type="integer" default="2147483648">
+  Bytes in write buffer before mandatory block compaction and disk flush. Default is 2GB (2_147_483_648). Plan for extra memory overhead.
+  
+  - 256MB: `268_435_456`
+  - 512MB: `536_870_912`
+  - 1GB: `1_073_741_824`
+  - 2GB: `2_147_483_648` (default)
+</ParamField>
+
+```toml
+[index_search.lnx]
+max_concurrency = 4
+reader_threads = 8
+writer_threads = 8
+writer_buffer = 2_147_483_648  # 2GB
+```
+
+<Accordion title="Tuning Lnx performance">
+  **For large archives (millions of posts):**
+  ```toml
+  max_concurrency = 4
+  reader_threads = 16
+  writer_threads = 8
+  writer_buffer = 4_294_967_296  # 4GB
+  ```
+  
+  **For high request rates:**
+  ```toml
+  max_concurrency = 12
+  reader_threads = 16
+  writer_threads = 8
+  writer_buffer = 1_073_741_824  # 1GB
+  ```
+  
+  **For resource-constrained systems:**
+  ```toml
+  max_concurrency = 2
+  reader_threads = 4
+  writer_threads = 4
+  writer_buffer = 268_435_456  # 256MB
+  ```
+</Accordion>
+
+## Search engine comparison
+
+<Tabs>
+  <Tab title="Lnx">
+    **Lnx** is a Rust-based embeddable search engine.
+    
+    **Pros:**
+    - Fast and lightweight
+    - Low resource usage
+    - Easy to deploy
+    - Good for medium-sized archives
+    
+    **Cons:**
+    - Less feature-rich than alternatives
+    - Smaller community
+    
+    ```toml
+    [index_search]
+    provider = 'lnx'
+    host = 'http://192.168.1.122:8000'
+    headers = { content-type = 'application/json', Authorization = 'password' }
+    ```
+  </Tab>
+  
+  <Tab title="Meilisearch">
+    **Meilisearch** is a powerful, user-friendly search engine.
+    
+    **Pros:**
+    - Excellent relevance ranking
+    - Typo tolerance
+    - Rich features (facets, filters, geosearch)
+    - Great documentation
+    
+    **Cons:**
+    - Higher resource usage
+    - More complex setup
+    
+    ```toml
+    [index_search]
+    provider = 'meili'
+    host = 'http://192.168.1.122:7700'
+    headers = { content-type = 'application/json', Authorization = 'Bearer your-master-key' }
+    ```
+  </Tab>
+  
+  <Tab title="Typesense">
+    **Typesense** is a fast, typo-tolerant search engine.
+    
+    **Pros:**
+    - Very fast search
+    - Typo tolerance
+    - Good documentation
+    - Active development
+    
+    **Cons:**
+    - Requires separate deployment
+    - Memory usage scales with dataset
+    
+    ```toml
+    [index_search]
+    provider = 'typesense'
+    host = 'http://192.168.1.122:8108'
+    headers = { content-type = 'application/json', 'X-TYPESENSE-API-KEY' = 'your-api-key' }
+    ```
+  </Tab>
+</Tabs>
+
+## Search plugins
+
+Custom search plugins can extend or replace built-in search functionality.
+
+<ParamField path="enabled" type="boolean" default="false">
+  Enable loading search plugins from the plugins directory
+</ParamField>
+
+```toml
+[search_plugins]
+enabled = false
+```
+
+<Note>
+  Search plugins allow custom search implementations. Documentation for creating plugins is in development.
+</Note>
+
+## Configuration examples
+
+<CodeGroup>
+```toml Vanilla only
+[vanilla_search]
+enabled = true
+highlight = true
+hits_per_page = 50
+max_hits = 1_000
+multi_board_search = true
+
+[index_search]
+enabled = false
+```
+
+```toml Lnx with vanilla fallback
+[vanilla_search]
+enabled = true
+highlight = false
+hits_per_page = 50
+max_hits = 1_000
+multi_board_search = false
+
+[index_search]
+enabled = true
+highlight = true
+hits_per_page = 50
+max_hits = 5_000
+provider = 'lnx'
+host = 'http://192.168.1.122:8000'
+headers = { content-type = 'application/json', Authorization = 'secure-password' }
+multi_board_search = true
+
+[index_search.lnx]
+max_concurrency = 8
+reader_threads = 16
+writer_threads = 8
+writer_buffer = 2_147_483_648
+```
+
+```toml Meilisearch production
+[vanilla_search]
+enabled = false
+
+[index_search]
+enabled = true
+highlight = true
+hits_per_page = 100
+max_hits = 10_000
+provider = 'meili'
+host = 'http://192.168.1.122:7700'
+headers = { content-type = 'application/json', Authorization = 'Bearer prod-master-key-xyz' }
+multi_board_search = true
+```
+</CodeGroup>
+
+## Search strategies
+
+<AccordionGroup>
+  <Accordion title="Small archives (<1M posts)">
+    **Recommendation:** Vanilla search or Lnx
+    
+    ```toml
+    [vanilla_search]
+    enabled = true
+    multi_board_search = true
+    ```
+    
+    Vanilla search is sufficient for small archives and requires no additional services.
+  </Accordion>
+  
+  <Accordion title="Medium archives (1M-10M posts)">
+    **Recommendation:** Lnx
+    
+    ```toml
+    [index_search]
+    enabled = true
+    provider = 'lnx'
+    host = 'http://192.168.1.122:8000'
+    
+    [index_search.lnx]
+    max_concurrency = 6
+    reader_threads = 12
+    writer_threads = 8
+    writer_buffer = 2_147_483_648
+    ```
+  </Accordion>
+  
+  <Accordion title="Large archives (>10M posts)">
+    **Recommendation:** Meilisearch or Typesense
+    
+    ```toml
+    [index_search]
+    enabled = true
+    provider = 'meili'
+    host = 'http://192.168.1.122:7700'
+    hits_per_page = 100
+    max_hits = 10_000
+    ```
+    
+    Dedicated search engines provide better performance and features for large datasets.
+  </Accordion>
+  
+  <Accordion title="High traffic archives">
+    **Recommendation:** Meilisearch or Typesense with vanilla fallback
+    
+    ```toml
+    [vanilla_search]
+    enabled = true  # Fallback
+    
+    [index_search]
+    enabled = true
+    provider = 'meili'
+    multi_board_search = true
+    ```
+    
+    Keep vanilla search enabled as a fallback if the index service is unavailable.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Search not returning results">
+    - Verify search engine is running and accessible
+    - Check `host` URL is correct
+    - Ensure authentication headers are valid
+    - Confirm index has been populated with data
+    - Review search engine logs for errors
+  </Accordion>
+  
+  <Accordion title="Connection errors">
+    - Use LAN IP address instead of `localhost` or domain name
+    - Check firewall rules allow connections
+    - Verify port is correct
+    - Test connectivity: `curl http://192.168.1.122:8000`
+  </Accordion>
+  
+  <Accordion title="Slow search performance">
+    - For Lnx: Increase `max_concurrency` and thread counts
+    - Check database/index server resource usage (CPU, memory, disk I/O)
+    - Consider increasing `hits_per_page` to reduce pagination
+    - Review query complexity and optimize
+  </Accordion>
+  
+  <Accordion title="High memory usage (Lnx)">
+    - Reduce `writer_buffer` size
+    - Decrease `writer_threads`
+    - Lower `max_concurrency`
+    - Consider switching to Meilisearch or Typesense for very large datasets
+  </Accordion>
+</AccordionGroup>

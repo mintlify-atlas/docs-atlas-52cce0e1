@@ -1,0 +1,263 @@
+---
+title: Architecture
+description: Technical architecture and design patterns in Ayase Quart
+---
+
+## Overview
+
+Ayase Quart is built on the Quart async web framework and follows a modular architecture with support for multiple database backends and extensible plugin systems.
+
+## Core technology stack
+
+- **Framework**: Quart (async Python web framework)
+- **Server**: Hypercorn (ASGI server)
+- **Templating**: Jinja2
+- **Database support**: MySQL, SQLite, PostgreSQL (via Asagi schema)
+- **Caching**: Redis (for moderation bloom filtering)
+- **Search engines**: LNX, Meilisearch, TypeSense
+
+## Project structure
+
+```
+src/ayase_quart/
+├── blueprints/          # Route handlers
+│   ├── api/            # API endpoints
+│   └── web/            # Web UI endpoints
+├── cli/                # Command-line interface
+├── configs/            # Configuration management
+├── db/                 # Database abstraction layer
+├── moderation/         # Moderation system
+├── plugins/            # Plugin system
+│   ├── blueprints/     # Custom endpoint plugins
+│   └── search/         # Search plugins
+├── posts/              # Post rendering and processing
+├── search/             # Full-text search integration
+├── security/           # Authentication and CSRF
+├── static/             # CSS, JavaScript, fonts
+├── templates/          # Jinja2 templates
+└── utils/              # Helper utilities
+```
+
+## Database abstraction layer
+
+Ayase Quart uses a unified database abstraction layer that supports multiple backends through the `DbHandler` class.
+
+### Database handler
+
+The `DbHandler` class in `db/__init__.py` provides a consistent interface across database types:
+
+```python
+db_q = DbHandler(db_conf, db_conf['db_type'])  # Query database
+db_m = DbHandler(db_mod_conf, DbType.sqlite)    # Moderation database
+```
+
+### Supported databases
+
+- **MySQL**: Production archives (Asagi schema)
+- **SQLite**: Lightweight archives, moderation database
+- **PostgreSQL**: Alternative production backend
+
+Each database type has its own implementation:
+- `db/mysql.py` - MySQL-specific pool and query runner
+- `db/sqlite.py` - SQLite-specific pool and query runner  
+- `db/postgresql.py` - PostgreSQL-specific pool and query runner
+
+### Query execution
+
+The abstraction layer provides two query methods:
+
+- `query_tuple()` - Returns rows as tuples (fast)
+- `query_dict()` - Returns rows as dictionaries (convenient)
+
+## Application lifecycle
+
+### Initialization
+
+The application is created in `main.py` through the `create_app()` factory:
+
+<Steps>
+  <Step title="Create Quart instance">
+    Initialize custom Quart2 application with configuration
+  </Step>
+
+  <Step title="Register components">
+    - Rate limiter
+    - Jinja2 template environment
+    - Blueprints (routes)
+    - Plugin blueprints (if enabled)
+  </Step>
+
+  <Step title="Setup moderation">
+    Initialize moderation system and authentication if enabled
+  </Step>
+
+  <Step title="Register error handlers">
+    - HTTP exceptions
+    - Application exceptions
+    - API validation errors
+  </Step>
+
+  <Step title="Configure middleware">
+    Apply proxy fix middleware if behind reverse proxy
+  </Step>
+</Steps>
+
+### Shutdown
+
+On application shutdown, `close_dbs()` is called to cleanly close:
+- Redis connections
+- Query database pool
+- Moderation database pool
+- Search engine connections
+
+## Blueprint architecture
+
+Blueprints organize routes into logical modules. They are conditionally loaded based on configuration:
+
+```python
+blueprints = [bp_about, bp_api_app, bp_web_app]
+
+if index_search_conf['enabled']:
+    blueprints.append(bp_web_index_search)
+
+if mod_conf['enabled']:
+    blueprints.extend([bp_web_auth, bp_web_admin, bp_web_moderation])
+```
+
+### Web blueprints
+
+- `bp_about` - About page
+- `bp_app` - Board browsing, thread viewing
+- `bp_search` - Search functionality
+- `bp_search_fts` - Full-text search
+- `bp_search_sql` - SQL-based search
+- `bp_moderation` - Moderation tools
+- `bp_auth` - Authentication (login/logout)
+- `bp_admin` - Admin panel
+- `bp_media` - Media serving (optional)
+- `bp_stats` - Statistics (optional)
+
+### API blueprints
+
+Mirror functionality for web blueprints with JSON responses:
+- `bp_api_app` - Board/thread data
+- `bp_api_auth` - Token-based authentication
+- `bp_api_admin` - Admin operations
+- `bp_api_moderation` - Moderation actions
+
+## Plugin system
+
+Ayase Quart supports two types of plugins:
+
+### Search plugins
+
+Extend search functionality with custom logic. Located in `plugins/search/`:
+
+```python
+# plugins/search/search_example.py
+class SearchPlugin:
+    async def search(self, query, filters):
+        # Custom search implementation
+        return results
+```
+
+Search plugins must implement the `i_search.py` interface.
+
+<Note>
+  Search plugins face a "post-filtering" challenge where results are filtered twice (plugin + native search), making final page sizes unpredictable.
+</Note>
+
+### Blueprint plugins
+
+Add custom endpoints to the application. Located in `plugins/blueprints/`:
+
+```python
+# plugins/blueprints/bp_example.py
+from quart import Blueprint
+
+bp = Blueprint('custom', __name__)
+
+@bp.route('/custom')
+async def custom_route():
+    return "Custom endpoint"
+```
+
+Plugins are automatically detected and loaded at startup, with messages logged to stdout.
+
+## Configuration system
+
+Configuration is loaded from TOML files using the `conf_loader.py` module:
+
+- `config.toml` - Main application configuration
+- `boards.toml` - Board definitions
+- `asset_hashes.json` - JavaScript integrity checksums
+
+Key configuration sections:
+- `app_conf` - Application settings (port, SSL, autoreload)
+- `db_conf` - Database connection settings
+- `mod_conf` - Moderation system settings
+- `index_search_conf` - Full-text search configuration
+- `media_conf` - Media storage settings
+- `stats_conf` - Statistics features
+
+## Search engine integration
+
+Ayase Quart integrates with multiple search engines through provider classes in `search/providers/`:
+
+- **LNX** - Full support, tested (only v0.9.0)
+- **Meilisearch** - Partial support
+- **TypeSense** - Partial support
+
+Each provider implements `baseprovider.py` interface for:
+- Index creation
+- Document loading
+- Query execution
+- Connection management
+
+## Moderation system
+
+The moderation system includes:
+
+### Authentication
+
+- **Web**: Cookie-based with math CAPTCHA
+- **API**: Bearer token authentication
+- **CLI**: Direct server access (no auth required)
+
+### Features
+
+- User-submitted reports management
+- Auto-hide reported content
+- Regex-based content filtering
+- Redis bloom filtering for performance
+
+### Database
+
+Moderation data is stored in a separate SQLite database (`db_m`) with schema defined in `moderation/sql/`.
+
+## Post processing
+
+Posts go through multiple processing stages in the `posts/` module:
+
+1. **Comment parsing** - Parse 4chan-style comments
+2. **Quotelinks** - Generate cross-post references
+3. **Capcodes** - Handle moderator/admin tags
+4. **Template optimization** - Prepare data for Jinja2 rendering
+
+## Security features
+
+Located in `security/`:
+
+- **CAPTCHA** - Math-based CAPTCHA for authentication
+- **CSRF protection** - Via Flask-WTF
+- **Rate limiting** - Via Quart-Rate-Limiter
+- **SSL/TLS** - Certificate-based encryption
+- **Asset integrity** - Subresource Integrity (SRI) for JavaScript
+
+## Performance considerations
+
+- **Async/await** - Non-blocking I/O throughout
+- **Connection pooling** - Database connection reuse
+- **Redis caching** - Bloom filters for moderation
+- **Asset hashing** - Browser cache optimization
+- **Hypercorn workers** - Multi-process parallelism

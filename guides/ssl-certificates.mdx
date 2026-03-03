@@ -1,0 +1,342 @@
+---
+title: SSL certificates
+description: Generate and configure SSL certificates for secure HTTPS access to Ayase Quart
+---
+
+SSL certificates enable HTTPS connections and are required for web-based authentication in the moderation system.
+
+<Warning>
+  Certificates are required for moderation (web-based authentication) unless you set `moderation.auth.cookie_secure=false` in your configuration.
+</Warning>
+
+## When you need SSL certificates
+
+SSL certificates are needed when:
+
+- Using the moderation system with web authentication
+- Deploying to production without a reverse proxy handling SSL
+- Securing direct public access to Ayase Quart
+
+<Tip>
+  If you're using a reverse proxy (like nginx or Caddy), handle SSL at the proxy level instead of in Ayase Quart.
+</Tip>
+
+## Generate self-signed certificates
+
+For development or internal use, create self-signed certificates.
+
+<Steps>
+  <Step title="Generate certificates">
+    Use OpenSSL to create a self-signed certificate:
+
+    ```bash
+    openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 \
+      -keyout key.pem -out cert.pem
+    ```
+
+    This creates:
+    - `key.pem` - Private key
+    - `cert.pem` - Certificate (valid for 10 years)
+  </Step>
+
+  <Step title="Enter certificate details">
+    OpenSSL will prompt for certificate information:
+
+    ```
+    Country Name (2 letter code) [AU]: US
+    State or Province Name (full name) [Some-State]: California
+    Locality Name (eg, city) []: San Francisco
+    Organization Name (eg, company) []: My Archive
+    Organizational Unit Name (eg, section) []: IT
+    Common Name (e.g. server FQDN or YOUR name) []: archive.example.com
+    Email Address []: admin@example.com
+    ```
+
+    <Note>
+      The Common Name should match your domain or IP address.
+    </Note>
+  </Step>
+
+  <Step title="Move certificates">
+    Place the certificates in your Ayase Quart directory:
+
+    ```bash
+    mv key.pem cert.pem /path/to/ayase-quart/
+    ```
+
+    The certificates must be in the working directory where Ayase Quart runs.
+  </Step>
+</Steps>
+
+<Warning>
+  On Windows, use Git Bash or WSL to run the `openssl` command.
+</Warning>
+
+## Configure Ayase Quart for SSL
+
+Enable SSL in your `config.toml`:
+
+```toml
+[app]
+url = 'https://your-domain.com'  # or 'https://192.168.1.100:9001'
+port = 9001
+ssl_key = 'key.pem'
+ssl_cert = 'cert.pem'
+
+[moderation.auth]
+cookie_secure = true  # Required for HTTPS
+```
+
+<Note>
+  Certificate paths are relative to the working directory specified in your systemd service or startup command.
+</Note>
+
+## Production certificates with Let's Encrypt
+
+For production deployments, use Let's Encrypt for free, trusted certificates.
+
+### Option 1: Use a reverse proxy (recommended)
+
+<Steps>
+  <Step title="Install Caddy or nginx">
+    Install a reverse proxy that handles SSL automatically:
+
+    **Caddy** (automatic HTTPS):
+    ```bash
+    sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+    sudo apt update
+    sudo apt install caddy
+    ```
+
+    **nginx**:
+    ```bash
+    sudo apt update
+    sudo apt install nginx certbot python3-certbot-nginx
+    ```
+  </Step>
+
+  <Step title="Configure reverse proxy">
+    **Caddy** (`/etc/caddy/Caddyfile`):
+    ```
+    your-domain.com {
+        reverse_proxy localhost:9001
+    }
+    ```
+
+    **nginx** (`/etc/nginx/sites-available/ayase-quart`):
+    ```nginx
+    server {
+        server_name your-domain.com;
+        
+        location / {
+            proxy_pass http://127.0.0.1:9001;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Obtain certificate">
+    **Caddy**: Automatically obtains and renews certificates.
+
+    **nginx**: Use Certbot:
+    ```bash
+    sudo certbot --nginx -d your-domain.com
+    ```
+  </Step>
+
+  <Step title="Configure Ayase Quart">
+    Disable SSL in `config.toml` (proxy handles it):
+
+    ```toml
+    [app]
+    url = 'https://your-domain.com'
+    port = 9001
+    # ssl_key and ssl_cert are commented out
+
+    [moderation.auth]
+    cookie_secure = true
+    ```
+  </Step>
+
+  <Step title="Set trusted proxy hops">
+    Tell Ayase Quart to trust the reverse proxy:
+
+    ```toml
+    [app]
+    proxy_trusted_hops = 1
+    ```
+  </Step>
+</Steps>
+
+### Option 2: Certbot with Ayase Quart directly
+
+<Steps>
+  <Step title="Install Certbot">
+    ```bash
+    sudo apt update
+    sudo apt install certbot
+    ```
+  </Step>
+
+  <Step title="Stop Ayase Quart temporarily">
+    Certbot needs port 80:
+
+    ```bash
+    sudo systemctl stop ayasequart
+    ```
+  </Step>
+
+  <Step title="Obtain certificate">
+    ```bash
+    sudo certbot certonly --standalone -d your-domain.com
+    ```
+
+    Certificates will be saved to:
+    - `/etc/letsencrypt/live/your-domain.com/fullchain.pem`
+    - `/etc/letsencrypt/live/your-domain.com/privkey.pem`
+  </Step>
+
+  <Step title="Link certificates">
+    Create symbolic links in your Ayase Quart directory:
+
+    ```bash
+    cd /path/to/ayase-quart
+    ln -s /etc/letsencrypt/live/your-domain.com/fullchain.pem cert.pem
+    ln -s /etc/letsencrypt/live/your-domain.com/privkey.pem key.pem
+    ```
+  </Step>
+
+  <Step title="Set up automatic renewal">
+    Certbot installs a renewal timer automatically. Verify:
+
+    ```bash
+    sudo systemctl status certbot.timer
+    ```
+  </Step>
+</Steps>
+
+## Verify SSL configuration
+
+Check that HTTPS is working:
+
+<Steps>
+  <Step title="Test HTTPS access">
+    Open your browser and navigate to:
+
+    ```
+    https://your-domain.com
+    ```
+
+    or
+
+    ```
+    https://192.168.1.100:9001
+    ```
+  </Step>
+
+  <Step title="Check certificate validity">
+    Use OpenSSL to verify:
+
+    ```bash
+    openssl s_client -connect your-domain.com:443 -servername your-domain.com
+    ```
+  </Step>
+
+  <Step title="Test moderation login">
+    Access the login page and verify secure authentication works:
+
+    ```
+    https://your-domain.com/login
+    ```
+  </Step>
+</Steps>
+
+## Certificate file permissions
+
+Ensure proper permissions for certificate files:
+
+```bash
+chmod 600 key.pem
+chmod 644 cert.pem
+chown ayasequart:ayasequart key.pem cert.pem
+```
+
+<Warning>
+  Never commit certificate files to version control. Add them to `.gitignore`:
+  ```
+  key.pem
+  cert.pem
+  ```
+</Warning>
+
+## Disable SSL for development
+
+For local development without HTTPS:
+
+```toml
+[app]
+url = 'http://127.0.0.1:9001'
+port = 9001
+# Comment out ssl_key and ssl_cert
+
+[moderation.auth]
+cookie_secure = false  # Allow cookies over HTTP
+```
+
+<Warning>
+  Never deploy to production with `cookie_secure=false`.
+</Warning>
+
+## Troubleshooting
+
+### Certificate verification failed
+
+If browsers show certificate warnings with self-signed certificates:
+
+- This is expected behavior
+- Click "Advanced" and "Proceed" to access the site
+- Or add the certificate to your browser's trusted certificates
+
+### Permission denied errors
+
+If Ayase Quart can't read certificate files:
+
+```bash
+# Check file ownership
+ls -l key.pem cert.pem
+
+# Fix permissions
+sudo chown ayasequart:ayasequart key.pem cert.pem
+chmod 600 key.pem
+chmod 644 cert.pem
+```
+
+### Port 443 already in use
+
+If another service is using port 443:
+
+```bash
+# Find what's using the port
+sudo netstat -tlnp | grep :443
+
+# Use a different port
+[app]
+port = 8443
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Moderation guide" icon="shield" href="/guides/moderation-guide">
+    Set up content moderation with secure authentication
+  </Card>
+  <Card title="Production deployment" icon="server" href="/guides/production-deployment">
+    Deploy Ayase Quart to production
+  </Card>
+</CardGroup>

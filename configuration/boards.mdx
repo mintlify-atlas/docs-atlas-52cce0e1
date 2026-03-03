@@ -1,0 +1,296 @@
+---
+title: Board configuration
+description: Configure board definitions and mappings for your 4chan or Lainchan archive
+---
+
+Board configuration maps board shortnames to their full display names. Ayase Quart includes template files for both 4chan and Lainchan archives.
+
+## Board configuration file
+
+Create a `boards.toml` file based on one of the provided templates:
+
+- **boards.4chan.tpl.toml** - Template for 4chan boards
+- **boards.lainchan.tpl.toml** - Template for Lainchan boards
+
+```bash
+cp boards.4chan.tpl.toml boards.toml
+# or
+cp boards.lainchan.tpl.toml boards.toml
+```
+
+## Configuration format
+
+Boards are defined in the `[boards]` section using TOML key-value pairs:
+
+```toml
+[boards]
+shortname = 'Full Board Name'
+```
+
+### 4chan boards example
+
+```toml
+[boards]
+a = 'Anime & Manga'
+g = 'Technology'
+v = 'Video Games'
+pol = 'Politically Incorrect'
+wsg = 'Worksafe GIF'
+```
+
+### Lainchan boards example
+
+```toml
+[boards]
+'λ' = 'Programming'
+'Ω' = 'Technology'
+'Δ' = 'Do It Yourself'
+sec = 'Security'
+lit = 'Literature'
+```
+
+<Note>
+  Board shortnames with special characters (like Lainchan's Greek letters) must be quoted in TOML.
+</Note>
+
+## Selecting boards to archive
+
+You can archive a subset of boards by removing unwanted entries from the `[boards]` section. Only include the boards you want to make available in your archive.
+
+<Accordion title="Example: Gaming-focused archive">
+  ```toml
+  [boards]
+  v = 'Video Games'
+  vg = 'Video Game Generals'
+  vm = 'Video Games/Multiplayer'
+  vmg = 'Video Games/Mobile'
+  vp = 'Pokemon'
+  vr = 'Retro Games'
+  vrpg = 'Video Games/RPG'
+  vst = 'Video Games/Strategy'
+  ```
+</Accordion>
+
+<Accordion title="Example: Technology-focused archive">
+  ```toml
+  [boards]
+  g = 'Technology'
+  sci = 'Science & Math'
+  diy = 'Do It Yourself'
+  ```
+</Accordion>
+
+## Complete board lists
+
+<Tabs>
+  <Tab title="4chan boards">
+    The template includes all 4chan boards:
+    
+    ```
+    3, a, aco, adv, an, b, bant, biz, c, cgl, ck, cm, co, d, diy,
+    e, f, fa, fit, g, gd, gif, h, hc, his, hm, hr, i, ic, int,
+    jp, k, lgbt, lit, m, mlp, mu, n, news, o, out, p, po, pol,
+    pw, qa, qst, r, r9k, s, s4s, sci, soc, sp, t, tg, toy, trv,
+    tv, u, v, vg, vip, vm, vmg, vp, vr, vrpg, vst, vt, w, wg,
+    wsg, wsr, x, xs, y
+    ```
+    
+    <Accordion title="View all 4chan board definitions">
+      | Shortname | Full Name |
+      |-----------|----------|
+      | 3 | 3DCG |
+      | a | Anime & Manga |
+      | aco | Adult Cartoons |
+      | adv | Advice |
+      | an | Animals & Nature |
+      | b | Random |
+      | bant | International/Random |
+      | biz | Business & Finance |
+      | c | Anime/Cute |
+      | cgl | Cosplay & EGL |
+      | ck | Food & Cooking |
+      | cm | Cute/Male |
+      | co | Comics & Cartoons |
+      | d | Hentai/Alternative |
+      | diy | Do It Yourself |
+      | e | Ecchi |
+      | f | Flash |
+      | fa | Fashion |
+      | fit | Fitness |
+      | g | Technology |
+      | gd | Graphic Design |
+      | gif | Adult GIF |
+      | h | Hentai |
+      | hc | Hardcore |
+      | his | History & Humanities |
+      | hm | Handsome Men |
+      | hr | High Resolution |
+      | i | Oekaki |
+      | ic | Artwork/Critique |
+      | int | International |
+      | jp | Otaku Culture |
+      | k | Weapons |
+      | lgbt | LGBT |
+      | lit | Literature |
+      | m | Mecha |
+      | mlp | Pony |
+      | mu | Music |
+      | n | Transportation |
+      | news | Current News |
+      | o | Auto |
+      | out | Outdoors |
+      | p | Photo |
+      | po | Papercraft & Origami |
+      | pol | Politically Incorrect |
+      | pw | Professional Wrestling |
+      | qa | Question & Answer |
+      | qst | Quests |
+      | r | Adult Requests |
+      | r9k | ROBOT9001 |
+      | s | Sexy Beautiful Women |
+      | s4s | Shit 4chan Says |
+      | sci | Science & Math |
+      | soc | Cams & Meetups |
+      | sp | Sports |
+      | t | Torrents |
+      | tg | Traditional Games |
+      | toy | Toys |
+      | trv | Travel |
+      | tv | Television & Film |
+      | u | Yuri |
+      | v | Video Games |
+      | vg | Video Game Generals |
+      | vip | Very Important Posts |
+      | vm | Video Games/Multiplayer |
+      | vmg | Video Games/Mobile |
+      | vp | Pokemon |
+      | vr | Retro Games |
+      | vrpg | Video Games/RPG |
+      | vst | Video Games/Strategy |
+      | vt | Virtual YouTubers |
+      | w | Anime/Wallpapers |
+      | wg | Wallpapers/General |
+      | wsg | Worksafe GIF |
+      | wsr | Worksafe Requests |
+      | x | Paranormal |
+      | xs | Extreme Sports |
+      | y | Yaoi |
+    </Accordion>
+  </Tab>
+  
+  <Tab title="Lainchan boards">
+    The template includes all Lainchan boards:
+    
+    ```
+    λ, Ω, Δ, sec, inter, lit, music, vis, hum, drg, zzz, layer, q, r
+    ```
+    
+    <Accordion title="View all Lainchan board definitions">
+      | Shortname | Full Name |
+      |-----------|----------|
+      | λ | Programming |
+      | Ω | Technology |
+      | Δ | Do It Yourself |
+      | sec | Security |
+      | inter | Games and Interactive Media |
+      | lit | Literature |
+      | music | Musical and Audible Media |
+      | vis | Visual Media |
+      | hum | Humanity |
+      | drg | Drugs 3.0 |
+      | zzz | Consciousness and Dreams |
+      | layer | layer |
+      | q | Questions and Complaints |
+      | r | Random |
+    </Accordion>
+  </Tab>
+</Tabs>
+
+## Board validation
+
+By default, Ayase Quart validates that all boards defined in `boards.toml` have corresponding database tables at startup.
+
+```toml
+[app]
+validate_boards_db = true
+```
+
+<Accordion title="When to disable validation">
+  Set `validate_boards_db = false` if:
+  
+  - You're preparing board configurations before importing archive data
+  - You want to test the application with incomplete board data
+  - You're gradually adding boards over time
+  
+  <Warning>
+    Disabling validation may result in errors when users try to access boards without database tables.
+  </Warning>
+</Accordion>
+
+## Custom board archives
+
+You can create custom board configurations for archives that aren't 4chan or Lainchan:
+
+1. Create a new `boards.toml` file
+2. Define your boards in the `[boards]` section
+3. Ensure board shortnames match your database table names
+4. Set appropriate archive type in `config.toml`:
+
+```toml
+[archive]
+type = 'yotsuba'  # or 'vichan'
+canonical_name = 'Your Archive Name'
+canonical_host = 'https://your-archive.com'
+```
+
+## Board display order
+
+Boards appear in the order they're defined in `boards.toml`. Organize them logically for your users:
+
+<Accordion title="Alphabetical order">
+  ```toml
+  [boards]
+  a = 'Anime & Manga'
+  g = 'Technology'
+  v = 'Video Games'
+  ```
+</Accordion>
+
+<Accordion title="By popularity">
+  ```toml
+  [boards]
+  v = 'Video Games'
+  pol = 'Politically Incorrect'
+  g = 'Technology'
+  a = 'Anime & Manga'
+  ```
+</Accordion>
+
+<Accordion title="By category">
+  ```toml
+  [boards]
+  # Technology
+  g = 'Technology'
+  sci = 'Science & Math'
+  
+  # Entertainment
+  v = 'Video Games'
+  tv = 'Television & Film'
+  mu = 'Music'
+  ```
+</Accordion>
+
+## Media configuration per board
+
+You can control which boards serve images and thumbnails using the media configuration:
+
+```toml
+[media]
+# Serve images for specific boards only
+boards_with_image = 'g,v,a'  # comma-separated list
+
+# Serve thumbnails for specific boards only
+boards_with_thumb = 'g,v,a,tv'
+```
+
+See [Media configuration](/configuration/media) for more details.

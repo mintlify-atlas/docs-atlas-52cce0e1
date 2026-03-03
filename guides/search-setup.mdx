@@ -1,0 +1,312 @@
+---
+title: Search setup
+description: Configure full-text search engines for advanced search capabilities in Ayase Quart
+---
+
+Ayase Quart includes native database search, but you can add a dedicated search engine for faster and more advanced search capabilities.
+
+## Search options
+
+Ayase Quart provides two search methods:
+
+- **Vanilla search** - Native SQL-based search (always available)
+- **Index search** - Full-text search using dedicated search engines (optional)
+
+<Tip>
+  Index search is optional but recommended for better performance on large archives.
+</Tip>
+
+## Supported search engines
+
+| Engine | Status | Notes |
+|--------|--------|-------|
+| [LNX](https://docs.lnx.rs/) | Fully supported | Recommended, extremely fast (&lt;2ms for 100 results) |
+| [Meilisearch](https://www.meilisearch.com/docs) | Partial support | Low RAM usage, good disk efficiency |
+| [TypeSense](https://typesense.org/docs) | Partial support | C++ based, caching support |
+
+<Note>
+  Only LNX 0.9.0 is currently supported. LNX 0.10.0 is incomplete and not recommended.
+</Note>
+
+## LNX setup (recommended)
+
+LNX offers the best performance with sub-millisecond search times.
+
+<Steps>
+  <Step title="Review Docker configuration">
+    Navigate to the LNX directory and review the configuration:
+
+    ```bash
+    cd ~/ayase-quart/index_search/lnx/
+    cat docker-compose.yml
+    ```
+
+    The default configuration:
+
+    ```yaml
+    services:
+      lnx:
+        image: chillfish8/lnx:0.9.0
+        network_mode: 'host'
+        stdin_open: true
+        environment:
+          - AUTHORIZATION_KEY=hello
+          - LOG_LEVEL=info
+        volumes:
+          - "./data:/index"
+    ```
+
+    <Warning>
+      Change `AUTHORIZATION_KEY` from the default value for security.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Ayase Quart">
+    Edit `config.toml` to enable index search:
+
+    ```toml
+    [index_search]
+    enabled = true
+    provider = 'lnx'
+    host = 'http://localhost:8000'
+    headers = { content-type = 'application/json', Authorization = 'hello' }
+    multi_board_search = true
+
+    [index_search.lnx]
+    max_concurrency = 4
+    reader_threads = 8
+    writer_threads = 8
+    writer_buffer = 2_147_483_648
+    ```
+
+    <Note>
+      - `max_concurrency`: Range 4-16. Keep low for large datasets to prevent I/O contention.
+      - `reader_threads` / `writer_threads`: Set to your vCPU count.
+      - `writer_buffer`: Bytes before disk flush. Default 256MB, shown is 2GB.
+    </Note>
+  </Step>
+
+  <Step title="Start LNX container">
+    In Terminal A, start the LNX container:
+
+    ```bash
+    cd ~/ayase-quart/index_search/lnx/
+    sudo docker-compose up
+    ```
+
+    <Tip>
+      Don't use `-d` flag initially so you can verify data is being populated.
+    </Tip>
+  </Step>
+
+  <Step title="Create search index">
+    In Terminal B, create the search index:
+
+    ```bash
+    cd ~/ayase-quart
+    source venv/bin/activate
+    ayaseq search index create
+    ```
+  </Step>
+
+  <Step title="Load board data">
+    Load your boards into the search index:
+
+    ```bash
+    ayaseq search load full a b c g gif
+    ```
+
+    Replace board names with the ones you're archiving. You should see progress bars, and Terminal A should show LNX processing data.
+  </Step>
+
+  <Step title="Run in background">
+    After loading completes, stop the container (Ctrl+C in Terminal A) and restart in detached mode:
+
+    ```bash
+    sudo docker-compose up -d
+    ```
+  </Step>
+</Steps>
+
+## Automation with systemd
+
+Automate LNX startup on server reboot with a systemd service.
+
+<Steps>
+  <Step title="Create startup script">
+    Create `/usr/local/bin/start_lnx.sh`:
+
+    ```bash
+    #!/usr/bin/env bash
+    set -e
+
+    # Clear caches for better performance
+    free
+    sync
+    echo 1 > /proc/sys/vm/drop_caches
+    free
+
+    cd /mnt/aq/index_search/lnx/
+    /usr/bin/docker compose up -d
+    ```
+
+    Make it executable:
+
+    ```bash
+    sudo chmod +x /usr/local/bin/start_lnx.sh
+    ```
+
+    <Note>
+      Update the path to match your LNX installation directory.
+    </Note>
+  </Step>
+
+  <Step title="Create systemd service">
+    Create `/etc/systemd/system/start_lnx.service`:
+
+    ```toml
+    [Unit]
+    Description=Drop caches and start lnx docker container
+    Requires=mnt.mount docker.service
+    After=mnt.mount docker.service
+
+    [Service]
+    Type=oneshot
+    WorkingDirectory=/mnt/aq/index_search/lnx/
+    ExecStart=/usr/local/bin/start_lnx.sh
+    RemainAfterExit=yes
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+    <Tip>
+      Adjust `Requires` and `After` based on your mount points. The example waits for `/mnt` to be mounted.
+    </Tip>
+  </Step>
+
+  <Step title="Enable service">
+    Enable and start the service:
+
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable start_lnx.service
+    sudo systemctl start start_lnx.service
+    sudo systemctl status start_lnx.service
+    ```
+  </Step>
+</Steps>
+
+## Search index management
+
+Manage your search index with the `ayaseq search` commands.
+
+### Create index
+
+Initialize a new search index:
+
+```bash
+ayaseq search index create
+```
+
+### Delete index
+
+Wipe all index data:
+
+```bash
+ayaseq search index delete
+```
+
+### Reset index
+
+Delete and recreate the index:
+
+```bash
+ayaseq search index reset
+```
+
+### Load boards
+
+Load specific boards into the index:
+
+```bash
+ayaseq search load full a b c g gif pol
+```
+
+### Incremental updates
+
+Update the index with new posts:
+
+```bash
+ayaseq search load incr a b c
+```
+
+Run continuously with cron interval (in seconds):
+
+```bash
+ayaseq search load incr a b c --cron 300
+```
+
+## Configure vanilla search
+
+Configure the native SQL-based search in `config.toml`:
+
+```toml
+[vanilla_search]
+enabled = true
+highlight = false
+hits_per_page = 50
+max_hits = 1_000
+multi_board_search = false
+```
+
+## Search engine comparison
+
+### LNX
+
+**Pros:**
+- Extremely fast (&lt;2ms for 100 results)
+- Uses Tantivy for indexing
+- Consistent performance under load
+
+**Cons:**
+- No boolean or null support
+- Single writer lock required
+- Documentation lacking
+- Version 0.10.0 incomplete
+
+### Meilisearch
+
+**Pros:**
+- Very low RAM usage
+- Leverages disk efficiently
+- Built-in debug UI
+
+**Cons:**
+- No infix search
+- Slow ingestion (bottlenecked on single core)
+- Single node only
+- Only considers first 10 words of search queries
+
+### TypeSense
+
+**Pros:**
+- Caching support for reduced load
+- C++ based for performance
+
+**Cons:**
+- No null support
+- No primary key concept (duplicates possible)
+- Limited result sets (100 works, 10,000 fails)
+- Requires authentication even in dev mode
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Moderation guide" icon="shield" href="/guides/moderation-guide">
+    Set up content moderation and reporting
+  </Card>
+  <Card title="Production deployment" icon="server" href="/guides/production-deployment">
+    Deploy Ayase Quart to production
+  </Card>
+</CardGroup>

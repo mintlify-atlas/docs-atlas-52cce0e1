@@ -1,0 +1,501 @@
+---
+title: API overview
+description: Learn about the Ayase Quart REST API for browsing 4chan and Lainchan archives programmatically
+---
+
+Ayase Quart provides a REST API (v1) for programmatically accessing archive data, managing moderation tasks, and administering users. The API follows the Asagi/FoolFuuka JSON format for board and thread endpoints.
+
+## Base URL
+
+All API endpoints are prefixed with `/api/v1`:
+
+```
+https://your-domain.com/api/v1
+```
+
+## API categories
+
+The API is organized into four main categories:
+
+<CardGroup cols={2}>
+  <Card title="Archive endpoints" icon="box-archive" href="#archive-endpoints">
+    Access board catalogs, threads, and indexes
+  </Card>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Obtain bearer tokens for authenticated requests
+  </Card>
+  <Card title="Moderation" icon="shield" href="#moderation-endpoints">
+    Manage reports and moderate content
+  </Card>
+  <Card title="Administration" icon="user-gear" href="#administration-endpoints">
+    Manage users, view configs, and access latest posts
+  </Card>
+</CardGroup>
+
+## Archive endpoints
+
+These endpoints return JSON data compatible with the Asagi/FoolFuuka format. Authentication is optional but recommended to view reported content.
+
+### Get board catalog
+
+```http
+GET /api/v1/{board}/catalog.json
+```
+
+Returns all threads on a board organized by page.
+
+<ParamField path="board" type="string" required>
+  Board shortname (e.g., `g`, `tech`, `a`)
+</ParamField>
+
+<Note>
+Authentication is optional. Authenticated users with moderation privileges can view reported posts.
+</Note>
+
+**Example request:**
+
+```bash
+curl https://your-domain.com/api/v1/g/catalog.json \
+  -H "Authorization: bearer YOUR_TOKEN"
+```
+
+### Get thread
+
+```http
+GET /api/v1/{board}/thread/{thread_id}.json
+```
+
+Returns all posts in a specific thread.
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+<ParamField path="thread_id" type="integer" required>
+  Thread number (OP post number)
+</ParamField>
+
+**Example request:**
+
+```bash
+curl https://your-domain.com/api/v1/g/thread/12345678.json \
+  -H "Authorization: bearer YOUR_TOKEN"
+```
+
+**Response structure:**
+
+<ResponseField name="posts" type="array">
+  Array of post objects in the thread
+</ResponseField>
+
+### Get board index
+
+```http
+GET /api/v1/{board}/{page_num}.json
+```
+
+Returns threads on a specific page of the board index.
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+<ParamField path="page_num" type="integer" required>
+  Page number (0-indexed)
+</ParamField>
+
+**Example request:**
+
+```bash
+curl https://your-domain.com/api/v1/g/0.json
+```
+
+**Response structure:**
+
+<ResponseField name="threads" type="array">
+  Array of thread objects on the specified page
+</ResponseField>
+
+## Moderation endpoints
+
+<Warning>
+All moderation endpoints require authentication and appropriate permissions.
+</Warning>
+
+### Get reports
+
+```http
+GET /api/v1/reports
+```
+
+Retrieve reports based on filters.
+
+**Query parameters:**
+
+<ParamField query="public_access" type="string" required>
+  Filter by visibility: `v` (visible) or `h` (hidden)
+</ParamField>
+
+<ParamField query="mod_status" type="string" required>
+  Filter by status: `o` (open) or `c` (closed)
+</ParamField>
+
+<ParamField query="page_size" type="integer" default="20">
+  Number of reports per page (max 50)
+</ParamField>
+
+<ParamField query="page_num" type="integer" default="0">
+  Page number (0-indexed)
+</ParamField>
+
+<ParamField query="board_shortnames" type="string | array">
+  Filter by board(s). Can be a single board or array of boards (max 1-5 characters each)
+</ParamField>
+
+**Required permissions:** `report_read`
+
+**Example request:**
+
+```bash
+curl "https://your-domain.com/api/v1/reports?public_access=v&mod_status=o&page_size=20&page_num=0" \
+  -H "Authorization: bearer YOUR_TOKEN"
+```
+
+### Take action on report
+
+```http
+POST /api/v1/reports/{report_parent_id}
+```
+
+Perform a moderation action on a specific report.
+
+<ParamField path="report_parent_id" type="integer" required>
+  ID of the report parent
+</ParamField>
+
+**Request body:**
+
+<ParamField body="action" type="string" required>
+  Action to perform: `report_delete`, `post_delete`, `media_delete`, `media_hide`, `media_show`, `post_show`, `post_hide`, `report_close`, `report_open`, `report_save_notes`
+</ParamField>
+
+<ParamField body="mod_notes" type="string">
+  Optional moderator notes
+</ParamField>
+
+**Required permissions:** `report_read`
+
+**Example request:**
+
+```bash
+curl -X POST https://your-domain.com/api/v1/reports/123 \
+  -H "Authorization: bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "report_close",
+    "mod_notes": "Resolved - false positive"
+  }'
+```
+
+**Response:**
+
+<ResponseField name="msg" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (if status >= 400)
+</ResponseField>
+
+### Bulk action on reports
+
+```http
+POST /api/v1/reports/bulk
+```
+
+Perform the same action on multiple reports at once.
+
+**Request body:**
+
+<ParamField body="action" type="string" required>
+  Action to perform on all reports
+</ParamField>
+
+<ParamField body="report_parent_ids" type="array" required>
+  Array of report parent IDs (at least 1 required)
+</ParamField>
+
+<ParamField body="mod_notes" type="string">
+  Optional moderator notes
+</ParamField>
+
+**Required permissions:** `report_read`
+
+**Example request:**
+
+```bash
+curl -X POST https://your-domain.com/api/v1/reports/bulk \
+  -H "Authorization: bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "report_close",
+    "report_parent_ids": [123, 456, 789],
+    "mod_notes": "Batch closure"
+  }'
+```
+
+**Response:**
+
+Returns HTTP 207 (Multi-Status) if reports had mixed results, or a single status code if all succeeded/failed the same way.
+
+<ResponseField name="results" type="object">
+  Object mapping report IDs to their individual results with `msg` and `code` fields
+</ResponseField>
+
+## Administration endpoints
+
+<Warning>
+All administration endpoints require authentication and specific admin permissions.
+</Warning>
+
+### Get latest posts
+
+```http
+GET /api/v1/latest
+```
+
+Retrieve the most recent posts across all boards in catalog format.
+
+**Required permissions:** `archive_latest_view`
+
+**Example request:**
+
+```bash
+curl https://your-domain.com/api/v1/latest \
+  -H "Authorization: bearer YOUR_TOKEN"
+```
+
+### Get configs
+
+```http
+GET /api/v1/configs
+```
+
+View moderation configuration settings.
+
+**Required permissions:** `archive_configs_view`
+
+**Example request:**
+
+```bash
+curl https://your-domain.com/api/v1/configs \
+  -H "Authorization: bearer YOUR_TOKEN"
+```
+
+**Response:**
+
+Returns an array of configuration key-value pairs:
+
+<ResponseField name="key" type="string">
+  Configuration key name
+</ResponseField>
+
+<ResponseField name="value" type="any">
+  Configuration value
+</ResponseField>
+
+Available configs: `hide_post_if_reported`, `hide_upstream_deleted_posts`, `remove_replies_to_hidden_op`, `regex_filter`, `path_to_regex_so`
+
+### List users
+
+```http
+GET /api/v1/users
+```
+
+Get all users in the system.
+
+**Required permissions:** `user_read`
+
+### Get user
+
+```http
+GET /api/v1/users/{user_id}
+```
+
+Get details for a specific user.
+
+<ParamField path="user_id" type="integer" required>
+  User ID
+</ParamField>
+
+**Required permissions:** `user_read`
+
+### Create user
+
+```http
+POST /api/v1/users
+```
+
+Create a new user account.
+
+**Request body:**
+
+<ParamField body="username" type="string" required>
+  Username (must not already exist)
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password (will be hashed with scrypt)
+</ParamField>
+
+<ParamField body="is_admin" type="boolean" required>
+  Whether the user has admin privileges
+</ParamField>
+
+<ParamField body="is_active" type="boolean" required>
+  Whether the user account is active
+</ParamField>
+
+<ParamField body="permissions" type="array">
+  Array of permission strings. See [Permissions](#permissions) for available values
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Optional notes about the user
+</ParamField>
+
+**Required permissions:** `user_create`
+
+**Rate limit:** 6 requests per hour
+
+### Update user
+
+```http
+PUT /api/v1/users/{user_id}
+```
+
+Update an existing user.
+
+<ParamField path="user_id" type="integer" required>
+  User ID to update
+</ParamField>
+
+**Request body:**
+
+<ParamField body="username" type="string" required>
+  Username
+</ParamField>
+
+<ParamField body="password_old" type="string">
+  Current password (required if changing password)
+</ParamField>
+
+<ParamField body="password_new" type="string">
+  New password
+</ParamField>
+
+<ParamField body="is_admin" type="boolean" required>
+  Admin status
+</ParamField>
+
+<ParamField body="is_active" type="boolean" required>
+  Active status
+</ParamField>
+
+<ParamField body="permissions" type="array">
+  Array of permission strings
+</ParamField>
+
+<ParamField body="notes" type="string">
+  User notes
+</ParamField>
+
+**Required permissions:** `user_update`
+
+<Warning>
+The system enforces that at least one active admin must exist at all times.
+</Warning>
+
+### Delete user
+
+```http
+DELETE /api/v1/users/{user_id}
+```
+
+Delete a user account.
+
+<ParamField path="user_id" type="integer" required>
+  User ID to delete
+</ParamField>
+
+**Required permissions:** `user_delete`
+
+<Warning>
+Cannot delete the last active admin user.
+</Warning>
+
+## Permissions
+
+The following permissions can be assigned to users:
+
+<AccordionGroup>
+  <Accordion title="User management">
+    - `user_create` - Create new users
+    - `user_read` - View user information
+    - `user_update` - Edit users
+    - `user_delete` - Delete users
+  </Accordion>
+
+  <Accordion title="Report management">
+    - `report_open` - Open reports
+    - `report_close` - Close reports
+    - `report_read` - View reports
+    - `report_update` - Update reports
+    - `report_delete` - Delete reports
+    - `report_save_notes` - Save moderator notes
+  </Accordion>
+
+  <Accordion title="Post management">
+    - `post_show` - Unhide posts
+    - `post_hide` - Hide posts
+    - `post_delete` - Delete posts
+  </Accordion>
+
+  <Accordion title="Media management">
+    - `media_hide` - Hide media files
+    - `media_show` - Unhide media files
+    - `media_delete` - Delete media files
+  </Accordion>
+
+  <Accordion title="Archive access">
+    - `archive_stats_view` - View statistics
+    - `archive_latest_view` - View latest posts
+    - `archive_configs_view` - View configuration
+    - `messages_view` - View messages
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+Admin users automatically have all permissions regardless of their assigned permission set.
+</Note>
+
+## Rate limiting
+
+Rate limiting is applied to sensitive endpoints:
+
+- **Login endpoint:** 3 requests per day
+- **User creation:** 6 requests per hour
+
+Rate limits can be configured in your application settings.
+
+## Configuration
+
+The API must be enabled in your configuration file:
+
+```toml
+[app]
+api = true
+login_endpoint = "login"  # Customize the login path
+```
+
+See [Authentication](/api/authentication) for details on obtaining and using bearer tokens.

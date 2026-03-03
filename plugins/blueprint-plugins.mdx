@@ -1,0 +1,344 @@
+---
+title: Blueprint plugins
+description: Create custom endpoints and routes with Quart blueprint plugins
+---
+
+Blueprint plugins allow you to add custom HTTP endpoints to Ayase Quart using [Quart Blueprints](https://quart.palletsprojects.com/en/latest/how_to_guides/blueprints.html). This enables you to extend the application with custom functionality, APIs, or integrations.
+
+## How blueprint plugins work
+
+Blueprint plugins are standard Quart Blueprints that are automatically discovered and registered with the application at startup. They can:
+
+- Define custom routes and endpoints
+- Serve static files from custom locations
+- Implement custom business logic
+- Integrate with external services
+
+## Creating a blueprint plugin
+
+<Steps>
+  <Step title="Create your plugin file">
+    Create a new Python file in `src/ayase_quart/plugins/blueprints/`:
+
+    ```bash
+    touch src/ayase_quart/plugins/blueprints/my_blueprint.py
+    ```
+  </Step>
+
+  <Step title="Define a Blueprint named 'bp'">
+    Your module **must** export a Blueprint instance named `bp`:
+
+    ```python
+    from quart import Blueprint
+
+    # The module must have a Blueprint named 'bp'
+    bp = Blueprint(
+        'my_blueprint',
+        __name__,
+        static_folder='../static',
+        static_url_path='/static/plugins'
+    )
+
+    @bp.get('/my-custom-endpoint')
+    async def my_custom_endpoint():
+        return {'message': 'Hello from my plugin!'}, 200
+    
+    @bp.post('/my-api')
+    async def my_api():
+        return {'status': 'success'}, 200
+    ```
+  </Step>
+
+  <Step title="Enable plugins in config">
+    Make sure plugins are enabled in your `config.toml`:
+
+    ```toml
+    [search_plugins]
+    enabled = true
+    ```
+  </Step>
+
+  <Step title="Restart Ayase Quart">
+    Restart the application to register your blueprint. You should see:
+
+    ```bash
+    Loading bp plugin: ayase_quart.plugins.blueprints.my_blueprint
+    ```
+  </Step>
+
+  <Step title="Access your endpoint">
+    Your custom endpoint is now available:
+
+    ```bash
+    curl http://localhost:9001/my-custom-endpoint
+    ```
+  </Step>
+</Steps>
+
+## Blueprint configuration
+
+### Blueprint constructor parameters
+
+<ParamField path="name" type="str" required>
+  The name of your blueprint. Should be unique across all blueprints.
+</ParamField>
+
+<ParamField path="__name__" type="str" required>
+  The import name of the blueprint. Always use `__name__` to reference the current module.
+</ParamField>
+
+<ParamField path="static_folder" type="str">
+  Path to static files directory, relative to the blueprint module. Use `'../static'` to share the main static folder.
+</ParamField>
+
+<ParamField path="static_url_path" type="str">
+  URL path for serving static files. **Cannot be** `/static` (reserved).
+  
+  Example: `/static/plugins`
+</ParamField>
+
+## Complete example
+
+Here's the complete example from `src/ayase_quart/plugins/blueprints/bp_example.py`:
+
+```python
+from quart import Blueprint
+
+# This module must have a Blueprint named bp
+# static_folder is relative to this module
+# static_url_path cannot be '/static'
+bp = Blueprint(
+    'bp_example',
+    __name__,
+    static_folder='../static',
+    static_url_path='/static/plugins',
+)
+
+
+# You are responsible for any endpoint collisions
+@bp.get('/health_plugin_blueprint')
+async def health_plugin_blueprint():
+    return '<link rel="stylesheet" href="/static/plugins/example.css"> ok', 200
+```
+
+<Note>
+  The example is wrapped in `if 0:` to maintain syntax highlighting without loading it by default. Remove this condition in your actual plugin.
+</Note>
+
+## Static files
+
+Blueprint plugins can serve static files like CSS, JavaScript, and images.
+
+### Serving static files
+
+```python
+bp = Blueprint(
+    'my_plugin',
+    __name__,
+    static_folder='static',  # Relative to plugin file
+    static_url_path='/static/my-plugin'
+)
+```
+
+With this configuration:
+- Files in `static/` (relative to your plugin) are served at `/static/my-plugin/*`
+- Example: `static/style.css` → `http://localhost:9001/static/my-plugin/style.css`
+
+### Using static files in responses
+
+```python
+@bp.get('/custom-page')
+async def custom_page():
+    html = '''
+    <html>
+        <head>
+            <link rel="stylesheet" href="/static/my-plugin/style.css">
+        </head>
+        <body>
+            <h1>Custom Page</h1>
+            <script src="/static/my-plugin/script.js"></script>
+        </body>
+    </html>
+    '''
+    return html, 200
+```
+
+## Route decorators
+
+Blueprints support all standard Quart route decorators:
+
+### GET requests
+
+```python
+@bp.get('/read-data')
+async def read_data():
+    return {'data': 'value'}, 200
+```
+
+### POST requests
+
+```python
+from quart import request
+
+@bp.post('/submit-data')
+async def submit_data():
+    data = await request.get_json()
+    return {'received': data}, 200
+```
+
+### Multiple HTTP methods
+
+```python
+@bp.route('/resource', methods=['GET', 'POST', 'PUT', 'DELETE'])
+async def handle_resource():
+    if request.method == 'GET':
+        return {'action': 'read'}
+    elif request.method == 'POST':
+        return {'action': 'create'}
+    # ... handle other methods
+```
+
+### URL parameters
+
+```python
+@bp.get('/posts/<int:post_id>')
+async def get_post(post_id: int):
+    return {'post_id': post_id}, 200
+
+@bp.get('/boards/<board_name>/thread/<int:thread_num>')
+async def get_thread(board_name: str, thread_num: int):
+    return {
+        'board': board_name,
+        'thread': thread_num
+    }, 200
+```
+
+## Important considerations
+
+<Warning>
+  You are responsible for any endpoint collisions. Ensure your routes don't conflict with existing Ayase Quart endpoints.
+</Warning>
+
+### Static URL paths
+
+- `static_url_path` **cannot be** `/static` - this is reserved for the main application
+- Use a unique path like `/static/plugins` or `/static/my-plugin-name`
+
+### Blueprint registration order
+
+Blueprint plugins are registered after the main application blueprints. This means:
+- Main application routes take precedence
+- Your plugin routes cannot override core functionality
+- Avoid using route paths that might conflict with core routes
+
+### Async/await
+
+All route handlers should be `async` functions since Quart is an async framework:
+
+```python
+# Good
+@bp.get('/data')
+async def get_data():
+    result = await some_async_operation()
+    return result
+
+# Avoid (synchronous)
+@bp.get('/data')
+def get_data():
+    return {'data': 'value'}
+```
+
+## Plugin loading process
+
+The system automatically discovers blueprint plugins using this logic from `i_blueprints.py:9`:
+
+```python
+def register_blueprint_plugins(app: Quart) -> None:
+    package_module = importlib.import_module(f'{REPO_PKG}.plugins.blueprints')
+
+    for _, module_name, is_pkg in pkgutil.iter_modules(
+        package_module.__path__,
+        package_module.__name__ + '.'
+    ):
+        module = importlib.import_module(module_name)
+
+        if hasattr(module, 'bp'):
+            print(f'Loading bp plugin: {module_name}')
+            app.register_blueprint(module.bp)
+```
+
+The plugin loader:
+1. Scans all modules in the `plugins.blueprints` package
+2. Checks if each module has a `bp` attribute
+3. Registers the blueprint with the application
+4. Logs successful loading to stdout
+
+## Advanced usage
+
+### Accessing the database
+
+You can import and use the database connections from Ayase Quart:
+
+```python
+from quart import Blueprint
+from ...db import db_q
+
+bp = Blueprint('db_plugin', __name__)
+
+@bp.get('/custom-query')
+async def custom_query():
+    async with db_q.pool.acquire() as conn:
+        result = await conn.fetch('SELECT * FROM posts LIMIT 10')
+        return {'posts': [dict(r) for r in result]}, 200
+```
+
+### Using templates
+
+You can use Ayase Quart's template system:
+
+```python
+from quart import Blueprint
+from ...render import render_controller
+from ...templates import env
+
+bp = Blueprint('template_plugin', __name__)
+
+@bp.get('/custom-page')
+async def custom_page():
+    template = env.from_string('<h1>{{title}}</h1>')
+    return await render_controller(
+        template,
+        title='Custom Page'
+    ), 200
+```
+
+### Error handling
+
+```python
+from quart import Blueprint
+from werkzeug.exceptions import NotFound
+
+bp = Blueprint('error_plugin', __name__)
+
+@bp.get('/maybe-exists/<int:item_id>')
+async def get_item(item_id: int):
+    item = await fetch_item(item_id)
+    if not item:
+        raise NotFound(f'Item {item_id} not found')
+    return {'item': item}, 200
+
+@bp.errorhandler(404)
+async def handle_not_found(error):
+    return {'error': 'Resource not found'}, 404
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Plugin overview" icon="puzzle-piece" href="/plugins/overview">
+    Learn about the plugin system
+  </Card>
+  <Card title="Search plugins" icon="magnifying-glass" href="/plugins/search-plugins">
+    Create custom search functionality
+  </Card>
+</CardGroup>

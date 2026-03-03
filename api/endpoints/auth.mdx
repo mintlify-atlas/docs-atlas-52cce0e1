@@ -1,0 +1,115 @@
+---
+title: Auth endpoints
+description: Authentication endpoints for obtaining API tokens
+---
+
+The auth endpoints handle user authentication and token generation for accessing protected API endpoints.
+
+## Login
+
+```http
+POST /api/v1/login
+```
+
+Authenticates a user and returns a JWT token for subsequent API requests.
+
+<Note>
+The exact login endpoint path is configurable via `app.login_endpoint` in the configuration file. The default is `/api/v1/login`.
+</Note>
+
+<Warning>
+This endpoint is rate-limited to 3 requests per day to prevent brute-force attacks.
+</Warning>
+
+### Request body
+
+<ParamField body="username" type="string" required>
+  User's username
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password
+</ParamField>
+
+<Expandable title="Example request">
+```bash
+curl -X POST "https://archive.example.com/api/v1/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "moderator",
+    "password": "secure_password"
+  }'
+```
+</Expandable>
+
+### Response
+
+<ResponseField name="token" type="string | null">
+  JWT token for authenticated requests. `null` if authentication fails.
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message if authentication fails. `null` on success.
+</ResponseField>
+
+<Expandable title="Success response (200)">
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "error": null
+}
+```
+</Expandable>
+
+<Expandable title="Invalid credentials (401)">
+```json
+{
+  "token": null,
+  "error": "Bad credentials"
+}
+```
+</Expandable>
+
+<Expandable title="Invalid request (400)">
+```json
+{
+  "token": null,
+  "error": "Bad request"
+}
+```
+</Expandable>
+
+## Using the token
+
+Once you receive a token, include it in the `Authorization` header of subsequent API requests:
+
+```bash
+curl -X GET "https://archive.example.com/api/v1/reports" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+## Token expiration
+
+<Note>
+There is no token logout endpoint. Tokens expire based on the configured JWT expiration time. To invalidate all tokens before expiration, the application's secret key must be changed.
+</Note>
+
+## Rate limiting
+
+The login endpoint is protected by rate limiting:
+
+- Maximum 3 login attempts per day per IP address
+- Rate limit resets after 24 hours
+
+Exceeding the rate limit will result in a `429 Too Many Requests` response.
+
+## Security considerations
+
+<Warning>
+Always use HTTPS in production to protect credentials and tokens during transmission.
+</Warning>
+
+- Tokens are signed with the application's secret key
+- Failed login attempts are rate-limited to prevent brute-force attacks
+- Usernames and passwords are trimmed of whitespace before validation
+- Passwords are hashed using scrypt with a 16-byte salt

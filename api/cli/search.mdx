@@ -1,0 +1,353 @@
+---
+title: search commands
+description: Manage search indexes and load posts for full-text search functionality
+---
+
+The `search` command group handles all search index operations, including creating, deleting, and populating indexes with post data. Supports multiple search backends (Meilisearch, LNX, Typesense).
+
+## Usage
+
+```bash
+python -m ayase_quart search <subcommand> [options]
+```
+
+## Subcommands
+
+### index
+
+Manage the lifecycle of search indexes. These operations affect the index structure itself, not the data within it.
+
+#### index create
+
+Create a new search index with the schema defined for your search provider.
+
+```bash
+python -m ayase_quart search index create
+```
+
+**Confirmation prompt:**
+```
+Create search index? (y/n):
+```
+
+**Output:**
+```
+Indexes created
+```
+
+**Use cases:**
+- Initial setup of search functionality
+- After changing search providers
+- Recovering from index corruption
+
+**Implementation details:**
+- Calls `sp.init_indexes()` followed by `sp.finalize()` (src/ayase_quart/cli/search_cli.py:17-18)
+- Creates index schema without loading data
+- Safe to run on existing indexes (may fail if index already exists)
+
+---
+
+#### index delete
+
+Remove all search index data. This is a destructive operation.
+
+```bash
+python -m ayase_quart search index delete
+```
+
+**Confirmation prompt:**
+```
+Delete search index? (y/n):
+```
+
+**Output:**
+```
+Index data wiped
+```
+
+<Warning>
+  This permanently deletes all indexed posts. You'll need to run `search load full` to rebuild the index.
+</Warning>
+
+**Use cases:**
+- Switching search providers
+- Clearing corrupt index data
+- Reclaiming disk space before rebuilding
+
+**Implementation details:**
+- Calls `sp.posts_wipe()` (src/ayase_quart/cli/search_cli.py:14)
+- Removes all documents from the index
+- Does not delete index schema/structure
+
+---
+
+#### index reset
+
+Delete and immediately recreate the search index. Combines `delete` and `create` operations.
+
+```bash
+python -m ayase_quart search index reset
+```
+
+**Confirmation prompt:**
+```
+Reset search index? (y/n):
+```
+
+**Output:**
+```
+Index data reset
+```
+
+**Use cases:**
+- After schema changes in the code
+- Complete index refresh
+- Troubleshooting index issues
+
+**Implementation details:**
+- Calls `sp.posts_wipe()`, `sp.init_indexes()`, `sp.finalize()` in sequence (src/ayase_quart/cli/search_cli.py:21-23)
+- Atomic operation (all steps complete together)
+
+---
+
+### load
+
+Populate the search index with post data from the database. Choose between full indexing or incremental updates.
+
+#### load full
+
+Index all posts from specified boards. This is a one-time bulk operation.
+
+```bash
+python -m ayase_quart search load full <BOARD> [<BOARD> ...]
+```
+
+<ParamField path="BOARD" type="string" required>
+  One or more board shortnames to index (e.g., `a`, `vg`, `pol`)
+</ParamField>
+
+**Example:**
+```bash
+python -m ayase_quart search load full a vg
+```
+
+**Output:**
+```
+Loading posts from board: a
+Indexed 1,523,891 posts from board: a
+Loading posts from board: vg
+Indexed 892,445 posts from board: vg
+Complete
+```
+
+**Use cases:**
+- Initial index population
+- After running `search index reset`
+- Adding new boards to search
+
+**Implementation details:**
+- Calls `load_full(boards)` (src/ayase_quart/cli/search_cli.py:31)
+- Processes all posts in database for specified boards
+- May take hours for large archives
+- Progress is printed to console
+
+---
+
+#### load incr
+
+Index posts that aren't in the search index yet. Runs continuously when using the `--cron` flag.
+
+```bash
+python -m ayase_quart search load incr [--cron SECONDS] <BOARD> [<BOARD> ...]
+```
+
+<ParamField path="BOARD" type="string" required>
+  One or more board shortnames to incrementally index
+</ParamField>
+
+<ParamField path="--cron" type="integer">
+  Run every N seconds. Omit this flag to run once and exit.
+</ParamField>
+
+**Example (one-time):**
+```bash
+python -m ayase_quart search load incr a vg
+```
+
+**Example (continuous):**
+```bash
+python -m ayase_quart search load incr --cron 300 a vg
+```
+
+**Output (cron mode):**
+```
+Indexing new posts...
+Indexed 145 new posts
+Waiting 300 seconds...
+Indexing new posts...
+Indexed 67 new posts
+Waiting 300 seconds...
+^C
+```
+
+<Note>
+  Press Ctrl+C to gracefully stop the cron loop. The command will complete the current indexing cycle before exiting.
+</Note>
+
+**Use cases:**
+- Keeping search index up-to-date with new posts
+- Running as a background service
+- Development/testing with frequent updates
+
+**Implementation details:**
+- Calls `incremental_index_single_thread()` in a loop (src/ayase_quart/cli/search_cli.py:38-40)
+- When `--cron` is set, sleeps for specified seconds between runs
+- Gracefully handles KeyboardInterrupt (src/ayase_quart/cli/__init__.py:14)
+- Closes database and search connections on exit (src/ayase_quart/cli/search_cli.py:48-49)
+
+## Typical workflows
+
+### Initial setup
+
+<Steps>
+  <Step title="Create index">
+    ```bash
+    python -m ayase_quart search index create
+    ```
+    Set up the index schema.
+  </Step>
+  
+  <Step title="Load all posts">
+    ```bash
+    python -m ayase_quart search load full a vg pol
+    ```
+    Populate with existing archive data.
+  </Step>
+  
+  <Step title="Start incremental indexing">
+    ```bash
+    python -m ayase_quart search load incr --cron 300 a vg pol
+    ```
+    Keep the index updated with new posts.
+  </Step>
+</Steps>
+
+### Switching search providers
+
+<Steps>
+  <Step title="Update configuration">
+    Change your search provider in `config.toml`.
+  </Step>
+  
+  <Step title="Reset index">
+    ```bash
+    python -m ayase_quart search index reset
+    ```
+    Remove old index and create new one with new provider.
+  </Step>
+  
+  <Step title="Reload data">
+    ```bash
+    python -m ayase_quart search load full a vg pol
+    ```
+    Populate the new index.
+  </Step>
+</Steps>
+
+### Troubleshooting index issues
+
+If search isn't working correctly:
+
+```bash
+# Delete corrupt index
+python -m ayase_quart search index delete
+
+# Recreate fresh index
+python -m ayase_quart search index create
+
+# Reload all data
+python -m ayase_quart search load full a vg
+```
+
+## Performance considerations
+
+<AccordionGroup>
+  <Accordion title="Full load duration">
+    Loading time depends on:
+    - Total number of posts in the database
+    - Search provider speed
+    - Database performance
+    - Network latency (if search provider is remote)
+    
+    Expect 1-10 minutes per million posts.
+  </Accordion>
+  
+  <Accordion title="Incremental load frequency">
+    For `--cron` interval, consider:
+    - Post volume on your boards
+    - Search provider indexing speed
+    - System resource availability
+    
+    Recommended: 300-600 seconds (5-10 minutes) for active boards.
+  </Accordion>
+  
+  <Accordion title="Memory usage">
+    The `load full` command loads posts in batches to avoid memory issues. The search provider maintains its own memory/disk requirements.
+  </Accordion>
+</AccordionGroup>
+
+## Error handling
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| Index already exists | Running `create` on existing index | Use `reset` instead |
+| Search provider unreachable | Connection issues | Check provider status and config |
+| Board not found | Invalid board shortname | Verify board exists in database |
+| KeyboardInterrupt | User pressed Ctrl+C | Normal shutdown, safe to restart |
+
+## Supported search providers
+
+The search commands work with any configured provider:
+
+<CardGroup cols={3}>
+  <Card title="Meilisearch" icon="magnifying-glass">
+    Fast, typo-tolerant search
+  </Card>
+  <Card title="LNX" icon="bolt">
+    Lightweight, fast indexing
+  </Card>
+  <Card title="Typesense" icon="database">
+    Typo-tolerant, scalable search
+  </Card>
+</CardGroup>
+
+Configure your provider in `config.toml` under the `[search]` section.
+
+## Running as a service
+
+For production deployments, run incremental indexing as a system service:
+
+### systemd example
+
+```ini /etc/systemd/system/ayase-search.service
+[Unit]
+Description=Ayase Quart Search Indexer
+After=network.target
+
+[Service]
+Type=simple
+User=ayase
+WorkingDirectory=/path/to/ayase_quart
+ExecStart=/usr/bin/python3 -m ayase_quart search load incr --cron 300 a vg pol
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl enable ayase-search
+sudo systemctl start ayase-search
+```

@@ -1,0 +1,128 @@
+---
+title: Contributing
+description: Guidelines for contributing to Ayase Quart development
+---
+
+## Getting started
+
+Ayase Quart welcomes contributions from the community. Whether you're fixing bugs, adding features, or improving documentation, your help is appreciated.
+
+## Ways to contribute
+
+You can contribute to Ayase Quart in several ways:
+
+- Opening pull requests for fixes or new features
+- Auditing the project for security or performance issues
+- Reporting bugs, security vulnerabilities, or performance issues
+- Proposing new features
+- Testing the project and reporting findings
+
+## Development setup
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Ayase Quart repository to your local machine:
+    ```bash
+    git clone https://github.com/sky-cake/ayase-quart.git
+    cd ayase-quart
+    ```
+  </Step>
+
+  <Step title="Create virtual environment">
+    Set up a Python virtual environment and install dependencies:
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    python -m pip install -r requirements.txt
+    python -m pip install .
+    ```
+  </Step>
+
+  <Step title="Install system dependencies">
+    Install required system packages:
+    ```bash
+    sudo apt update
+    sudo apt install python3-dev default-libmysqlclient-dev build-essential redis-server
+    ```
+  </Step>
+
+  <Step title="Configure boards and settings">
+    Copy template configuration files and customize them:
+    ```bash
+    cp boards.tpl.toml boards.toml
+    cp config.tpl.toml config.toml
+    ayaseq prep secret  # Generates secret key
+    ```
+  </Step>
+
+  <Step title="Generate asset hashes">
+    Create JavaScript integrity checksums:
+    ```bash
+    ayaseq prep hashjs
+    ```
+  </Step>
+</Steps>
+
+## Code quality
+
+### Formatting and linting
+
+<Note>
+  Do **not** sort imports automatically. Some tools may not respect `#noqa` and will shuffle or delete `quart_flask_patch` imports.
+</Note>
+
+Use ruff for lint checking:
+
+```bash
+python -m pip install ruff
+ruff check
+```
+
+### Asset integrity
+
+JavaScript resources should be served with integrity checksums in production. The `ayaseq prep hashjs` command creates/overwrites `asset_hashes.json` with SHA-384 hashes of all JavaScript files under `/static/js`.
+
+**Production mode** (with integrity checks):
+```html
+<script type="text/javascript" defer src="/static/js/index.js" 
+  integrity="sha384-b9Ktk8DOJhl3DVyrzWsTxgiKty7CS1etyjL6BIRyTvAaW0e1a3m4VSYlsQpjyqlB">
+</script>
+```
+
+**Development mode** (without integrity checks):
+
+During active development, you can disable integrity checks by deleting or emptying the `asset_hashes.json` file:
+
+```html
+<script type="text/javascript" defer src="/static/js/index.js"></script>
+```
+
+## Pull requests
+
+When submitting pull requests:
+
+1. Ensure your code follows the project's formatting guidelines
+2. Test your changes thoroughly
+3. Update documentation if adding new features
+4. Run `ayaseq prep hashjs` before committing if you modified JavaScript files
+5. Write clear commit messages describing the changes
+
+<Info>
+  The `main` branch is considered production-ready. All pull requests should target this branch.
+</Info>
+
+## License compliance
+
+This project uses the GNU Affero General Public License v3.0 (GNU AGPLv3).
+
+<Note>
+  Do not remove or hide existing links or references to the GitHub repository. The "Powered by Ayase Quart" footer should remain visible on all instances.
+</Note>
+
+## Support and donations
+
+If you find Ayase Quart valuable, consider supporting the project:
+
+- **BTC**: 3NTq5J41seSiCckK9PJc8cpkD9Bp9CNUSA
+- **ETH**: 0x1bfCADA8C808Eb3AE7964304F69004a1053Fb1da
+- **USDC**: 0xAd002E0e9A64DE5e0B93BB7509B475309A2e1ac8

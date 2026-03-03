@@ -1,0 +1,375 @@
+---
+title: Moderation guide
+description: Configure and use the Ayase Quart moderation system for content management and user reports
+---
+
+Ayase Quart includes a comprehensive moderation system for managing user-submitted reports and filtering content.
+
+## Moderation features
+
+- **User reports** - View and manage community-submitted reports
+- **Auto-hide** - Automatically hide reported content
+- **Regex filtering** - Filter content based on regex patterns
+- **Multiple interfaces** - Web, API, and CLI support
+- **Authentication** - Secure access with cookie or bearer token authentication
+
+<Warning>
+  SSL certificates are required for moderation authentication unless `moderation.auth.cookie_secure=false` is set.
+</Warning>
+
+## Configuration
+
+Configure moderation settings in `config.toml`:
+
+```toml
+[moderation]
+enabled = true
+api = false
+
+admin_user = 'admin'
+admin_password = 'admin'
+
+# Auto-hide reported content
+hide_post_if_reported = true
+
+# Hide after N reports from different IPs
+n_reports_then_hide = 1
+
+# Hide posts deleted by upstream moderators
+hide_upstream_deleted_posts = true
+
+# Hide replies to hidden OPs
+remove_replies_to_hidden_op = true
+
+# Cache type for filters
+filter_cache_type = 'sqlite'  # 'sqlite' or 'redis'
+
+# Regex pattern to never serve matching posts
+regex_filter = ''  # e.g. 'spam|nsfw|banned_term'
+
+# Path to sqlite-regex extension
+path_to_regex_so = ''  # Download from https://github.com/asg017/sqlite-regex/releases
+
+# Directory for hidden images
+hidden_images_path = ''  # e.g. '/home/garbage/disposal'
+```
+
+<Tip>
+  Change the default username and password before deploying to production.
+</Tip>
+
+### SQLite moderation database
+
+Configure the SQLite moderation database:
+
+```toml
+[moderation.sqlite]
+database = 'path/to/moderation.db'
+```
+
+<Note>
+  SQLite 3.35.0+ is required for moderation tools. Check version:
+  ```bash
+  python -c "import sqlite3; print(sqlite3.sqlite_version)"
+  ```
+</Note>
+
+### Redis configuration
+
+For better performance, use Redis for authentication and filtering:
+
+```toml
+[moderation.redis]
+db = 4
+fc_key_prefix = 'filter_cache:'
+fc_dump_dir = './data/filter_cache/'
+bloom_err_rate = 0.01
+bloom_init_size = 4_000_000
+bloom_resize_mult = 2
+cuckoo_capacity = 10_000
+cuckoo_bucket = 2000
+cuckoo_iter_max = 5
+```
+
+### Authentication settings
+
+```toml
+[moderation.auth]
+cookie_samesite = 'Strict'
+cookie_secure = false  # Set to true in production with HTTPS
+cookie_http_only = true
+cookie_name = 'aq'
+
+cookie_salt = 'web salt'
+bearer_salt = 'api salt'
+
+cookie_duration = 604_800  # One week
+bearer_duration = 604_800  # One week
+```
+
+## Set up Redis (optional)
+
+Redis improves performance for moderation bloom filtering.
+
+<Steps>
+  <Step title="Install Redis">
+    Redis is typically included in the system packages:
+
+    ```bash
+    sudo apt update
+    sudo apt install redis-server
+    ```
+  </Step>
+
+  <Step title="Configure Redis">
+    Edit the Redis configuration:
+
+    ```bash
+    sudo nano /etc/redis/redis.conf
+    ```
+
+    Change `supervised no` to `supervised systemd` and configure your listening port.
+  </Step>
+
+  <Step title="Restart Redis">
+    Apply changes and verify status:
+
+    ```bash
+    sudo systemctl restart redis
+    sudo systemctl status redis
+    ```
+  </Step>
+
+  <Step title="Enable in config">
+    Update `config.toml`:
+
+    ```toml
+    [stats]
+    redis = true
+    redis_db = 2
+
+    [moderation]
+    filter_cache_type = 'redis'
+    ```
+  </Step>
+</Steps>
+
+## Web interface
+
+The web interface uses cookie-based authentication with a math captcha.
+
+<Steps>
+  <Step title="Access login page">
+    Navigate to your configured login endpoint (default `/login`):
+
+    ```
+    http://127.0.0.1:9001/login
+    ```
+  </Step>
+
+  <Step title="Solve captcha">
+    Complete the math captcha to prove you're human.
+  </Step>
+
+  <Step title="Enter credentials">
+    Use your configured admin credentials (default: username `admin`, password `admin`).
+  </Step>
+
+  <Step title="Manage reports">
+    Access moderation features through the web interface:
+    - View submitted reports
+    - Hide/show posts
+    - Delete content
+    - Add moderator notes
+  </Step>
+</Steps>
+
+## API authentication
+
+The API uses bearer token authentication.
+
+<Steps>
+  <Step title="Enable API">
+    Set in `config.toml`:
+
+    ```toml
+    [moderation]
+    api = true
+    ```
+  </Step>
+
+  <Step title="Get access token">
+    Send a POST request to get a token:
+
+    ```bash
+    curl -X POST http://localhost:9001/api/v1/login \
+      -H "Content-Type: application/json" \
+      -d '{"username": "admin", "password": "admin"}'
+    ```
+  </Step>
+
+  <Step title="Use token in requests">
+    Include the token in the `Authorization` header:
+
+    ```bash
+    curl http://localhost:9001/api/v1/reports \
+      -H "Authorization: bearer YOUR_TOKEN_HERE"
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Use [Bruno](https://github.com/usebruno/bruno) to test the API. Import the collection from `/dev/bruno_aq.json`.
+</Tip>
+
+## CLI commands
+
+The CLI doesn't require authentication since it requires server access.
+
+### View report count
+
+```bash
+ayaseq report cli-get-report-count
+```
+
+Output:
+```
+Report count: 4
+```
+
+### List reports
+
+View all reports:
+
+```bash
+ayaseq report cli-get-reports
+```
+
+Filter by criteria:
+
+```bash
+ayaseq report cli-get-reports --public_access v --created_at_gte "2024-01-01"
+```
+
+Available filters:
+- `--report_parent_id`, `-id` - Specific report ID
+- `--board_shortnames`, `-boards` - Filter by boards
+- `--is_op`, `-op` - Filter by OP status
+- `--thread_num`, `-tno` - Specific thread
+- `--num`, `-pno` - Specific post
+- `--submitter_category`, `-cat` - Report category
+- `--public_access`, `-access` - Access level
+- `--mod_status`, `-status` - Moderation status
+- `--created_at_gte`, `-cgte` - Created after date
+- `--created_at_lte`, `-clte` - Created before date
+
+### Edit report
+
+Update report metadata:
+
+```bash
+ayaseq report cli-edit-report \
+  --report_parent_id 2 \
+  --mod_status c \
+  --mod_notes "Reviewed and closed"
+```
+
+Options:
+- `--public_access`, `-access` - Set access level (v=visible, h=hidden)
+- `--mod_status`, `-status` - Set status (o=open, c=closed)
+- `--mod_notes`, `-notes` - Add moderator notes
+
+### Delete report
+
+Remove a report:
+
+```bash
+ayaseq report cli-delete-report --report_parent_id 5
+```
+
+### Take action on report
+
+Perform moderation actions:
+
+```bash
+ayaseq report cli-reports-action \
+  --report_parent_id 2 \
+  --action post_hide \
+  --mod_notes "Hidden for violating rules"
+```
+
+Available actions:
+- `report_delete` - Delete the report
+- `post_delete` - Delete the reported post
+- `media_delete` - Delete associated media
+- `media_hide` - Hide media
+- `media_show` - Show hidden media
+- `post_show` - Show hidden post
+- `post_hide` - Hide post
+- `report_close` - Close report
+- `report_open` - Reopen report
+- `report_save_notes` - Save moderator notes
+
+## Regex filtering
+
+Filter posts matching regex patterns to never serve them.
+
+<Steps>
+  <Step title="Download sqlite-regex extension">
+    Download the SQLite regex extension from [sqlite-regex releases](https://github.com/asg017/sqlite-regex/releases).
+  </Step>
+
+  <Step title="Configure regex filter">
+    Edit `config.toml`:
+
+    ```toml
+    [moderation]
+    regex_filter = 'spam|viagra|banned_term'
+    path_to_regex_so = '/path/to/regex0.so'
+    ```
+  </Step>
+
+  <Step title="Restart Ayase Quart">
+    The filter applies to all future requests:
+
+    ```bash
+    sudo systemctl restart ayasequart
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Complex regex patterns may impact performance. Test thoroughly before deploying.
+</Warning>
+
+## Report categories
+
+Users can submit reports in these categories:
+
+- NSFW content on a SFW board
+- DCMA violation
+- Illegal content
+- Spam
+- Rule violation
+- Other
+
+## Moderation statuses
+
+- `o` - Open (pending review)
+- `c` - Closed (reviewed and resolved)
+
+## Public access levels
+
+- `v` - Visible (publicly accessible)
+- `h` - Hidden (not displayed to users)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="SSL certificates" icon="lock" href="/guides/ssl-certificates">
+    Set up SSL for secure authentication
+  </Card>
+  <Card title="Production deployment" icon="server" href="/guides/production-deployment">
+    Deploy with systemd and reverse proxy
+  </Card>
+</CardGroup>

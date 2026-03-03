@@ -1,0 +1,107 @@
+---
+title: CLI overview
+description: Command-line interface for managing Ayase Quart archive system operations
+---
+
+The Ayase Quart CLI provides comprehensive tools for managing your 4chan/Lainchan archive system. It includes commands for system preparation, search index management, and moderation workflows.
+
+## Command structure
+
+All CLI commands follow the pattern:
+
+```bash
+python -m ayase_quart <command> <subcommand> [options]
+```
+
+The CLI is organized into three main command groups:
+
+<CardGroup cols={3}>
+  <Card title="prep" icon="wrench" href="/api/cli/prep">
+    System preparation and configuration
+  </Card>
+  <Card title="search" icon="magnifying-glass" href="/api/cli/search">
+    Search index management and loading
+  </Card>
+  <Card title="reports" icon="flag" href="/api/cli/reports">
+    User report and moderation management
+  </Card>
+</CardGroup>
+
+## Quick start
+
+<Steps>
+  <Step title="Prepare the system">
+    Generate required secrets and hashes before first launch:
+    
+    ```bash
+    python -m ayase_quart prep secret
+    python -m ayase_quart prep hashjs
+    python -m ayase_quart prep boards
+    ```
+  </Step>
+  
+  <Step title="Set up search indexing">
+    Initialize the search index and load posts:
+    
+    ```bash
+    python -m ayase_quart search index create
+    python -m ayase_quart search load full a vg
+    ```
+  </Step>
+  
+  <Step title="Monitor reports">
+    View and manage user-submitted reports:
+    
+    ```bash
+    python -m ayase_quart mod report list
+    ```
+  </Step>
+</Steps>
+
+## Getting help
+
+Display help for any command by running it without arguments or with `--help`:
+
+```bash
+python -m ayase_quart --help
+python -m ayase_quart prep --help
+python -m ayase_quart search index --help
+```
+
+## Common patterns
+
+### Running with cron
+
+Use the `--cron` flag to run incremental operations continuously:
+
+```bash
+python -m ayase_quart search load incr --cron 300 a vg
+```
+
+This will index new posts every 300 seconds (5 minutes).
+
+### Filtering by board
+
+Many commands accept board shortnames to limit operations:
+
+```bash
+python -m ayase_quart search load full a vg pol
+python -m ayase_quart mod report list -b a -b vg
+```
+
+### Working with reports
+
+Report IDs are used throughout the moderation commands:
+
+```bash
+# View reports
+python -m ayase_quart mod report list
+
+# Take action on specific reports
+python -m ayase_quart mod report close 123
+python -m ayase_quart mod post hide 123
+```
+
+<Note>
+  The CLI uses Python's asyncio for database and search operations. Some commands may take time to complete depending on the size of your archive.
+</Note>

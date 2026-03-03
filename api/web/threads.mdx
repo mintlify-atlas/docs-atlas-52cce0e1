@@ -1,0 +1,86 @@
+---
+title: Thread routes
+description: Web interface endpoints for viewing threads and individual posts
+---
+
+## Thread view
+
+```http
+GET /<board>/thread/<thread_num>
+```
+
+Displays a complete thread with all posts.
+
+<ParamField path="board" type="string" required>
+  Board shortname (e.g., `g`, `tech`, `lambda`)
+</ParamField>
+
+<ParamField path="thread_num" type="integer" required>
+  Thread number (the post number of the OP)
+</ParamField>
+
+### Response
+
+Returns an HTML page with:
+- All posts in the thread
+- Quotelink resolution and backlinks
+- Media attachments with thumbnails
+- Thread statistics (reply count, image count)
+- Report form (if authenticated)
+
+<ResponseField name="posts_t" type="string">
+  Rendered HTML for all posts in the thread
+</ResponseField>
+
+<ResponseField name="nreplies" type="integer">
+  Total number of replies in the thread
+</ResponseField>
+
+<ResponseField name="nimages" type="integer">
+  Total number of images in the thread
+</ResponseField>
+
+<Note>
+Threads are rendered with full quotelink support. Clicking a quotelink will highlight the referenced post or fetch it if not visible.
+</Note>
+
+## Get post
+
+```http
+GET /<board>/post/<post_id>
+```
+
+Fetches a single post as JSON. Used by the client to load posts not currently visible on the page (e.g., when viewing search results).
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+<ParamField path="post_id" type="integer" required>
+  Post number
+</ParamField>
+
+### Response
+
+Returns JSON with the post data:
+
+<ResponseField name="html_content" type="string">
+  Rendered HTML for the post
+</ResponseField>
+
+<ResponseField name="thread_num" type="integer">
+  The thread number this post belongs to
+</ResponseField>
+
+<Note>
+This endpoint returns an empty object `{}` if the post doesn't exist or has been removed by moderation.
+</Note>
+
+### Example response
+
+```json
+{
+  "html_content": "<article class=\"post\">...</article>",
+  "thread_num": 123456
+}
+```

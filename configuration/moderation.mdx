@@ -1,0 +1,481 @@
+---
+title: Moderation configuration
+description: Configure moderation features including post hiding, reporting, filtering, and authentication
+---
+
+Ayase Quart includes comprehensive moderation features for archive administrators. The `[moderation]` section controls user reporting, post filtering, and content management.
+
+## Basic moderation settings
+
+<ParamField path="enabled" type="boolean" default="true">
+  Enable moderation features including post hiding, reporting, and admin interface
+</ParamField>
+
+<ParamField path="api" type="boolean" default="false">
+  Enable moderation API endpoints for programmatic access
+</ParamField>
+
+<ParamField path="admin_user" type="string" default="admin" required>
+  Administrator username for login
+  
+  <Warning>Change the default username in production</Warning>
+</ParamField>
+
+<ParamField path="admin_password" type="string" default="admin" required>
+  Administrator password for login
+  
+  <Warning>Change the default password in production. Use a strong, unique password.</Warning>
+</ParamField>
+
+```toml
+[moderation]
+enabled = true
+api = false
+admin_user = 'admin'
+admin_password = 'admin'
+```
+
+## Post reporting and hiding
+
+<ParamField path="hide_post_if_reported" type="boolean" default="true">
+  Hide posts immediately when reported by users. Takes precedence over `n_reports_then_hide`.
+</ParamField>
+
+<ParamField path="n_reports_then_hide" type="integer" default="1">
+  Number of reports from different IP addresses required to automatically hide a post. Only applies if `hide_post_if_reported` is false.
+</ParamField>
+
+<ParamField path="hide_upstream_deleted_posts" type="boolean" default="true">
+  Hide posts that were deleted by upstream staff (e.g., 4chan moderators) in the live archive
+</ParamField>
+
+<ParamField path="remove_replies_to_hidden_op" type="boolean" default="true">
+  When an OP (original post/thread starter) is hidden, also hide all replies to that thread
+</ParamField>
+
+```toml
+[moderation]
+hide_post_if_reported = true
+n_reports_then_hide = 1
+hide_upstream_deleted_posts = true
+remove_replies_to_hidden_op = true
+```
+
+<Accordion title="Report hiding strategies">
+  **Immediate hiding:**
+  ```toml
+  hide_post_if_reported = true
+  n_reports_then_hide = 1
+  ```
+  First report immediately hides the post.
+  
+  **Threshold-based hiding:**
+  ```toml
+  hide_post_if_reported = false
+  n_reports_then_hide = 3
+  ```
+  Requires 3 reports from different IPs before hiding.
+  
+  **Manual review only:**
+  ```toml
+  hide_post_if_reported = false
+  n_reports_then_hide = 999999
+  ```
+  Reports are tracked but posts are never auto-hidden. Admin must manually review and hide.
+</Accordion>
+
+## Content filtering
+
+<ParamField path="regex_filter" type="string" default="">
+  Regular expression pattern for filtering posts. Posts matching this pattern will never be served.
+  
+  **Example:** `'gentoo|based'` blocks posts containing "gentoo" or "based"
+  
+  Leave empty (`''`) to disable regex filtering.
+</ParamField>
+
+<ParamField path="path_to_regex_so" type="string" default="">
+  Path to sqlite-regex shared object file for regex filtering support. Download from [sqlite-regex releases](https://github.com/asg017/sqlite-regex/releases).
+  
+  Required only when using SQLite as filter cache and `regex_filter` is not empty.
+</ParamField>
+
+```toml
+[moderation]
+regex_filter = 'spam|scam|phishing'
+path_to_regex_so = '/usr/local/lib/regex0.so'
+```
+
+<Warning>
+  Test regex patterns carefully. Overly broad patterns may hide legitimate content.
+</Warning>
+
+## Filter cache storage
+
+The filter cache stores information about reported and hidden posts. Choose between SQLite and Redis.
+
+<ParamField path="filter_cache_type" type="string" default="sqlite">
+  Storage backend for filter cache
+  
+  **Options:**
+  - `sqlite` - File-based storage, simpler setup
+  - `redis` - In-memory storage, better performance
+</ParamField>
+
+### SQLite filter cache
+
+```toml
+[moderation]
+filter_cache_type = 'sqlite'
+
+[moderation.sqlite]
+database = 'path/to/moderation.db'
+```
+
+<ParamField path="database" type="string" default="path/to/moderation.db" required>
+  Path to the SQLite moderation database file. Can be relative or absolute.
+</ParamField>
+
+### Redis filter cache
+
+```toml
+[moderation]
+filter_cache_type = 'redis'
+
+[moderation.redis]
+db = 4
+fc_key_prefix = 'filter_cache:'
+fc_dump_dir = './data/filter_cache/'
+bloom_err_rate = 0.01
+bloom_init_size = 4_000_000
+bloom_resize_mult = 2
+cuckoo_capacity = 10_000
+cuckoo_bucket = 2000
+cuckoo_iter_max = 5
+```
+
+<ParamField path="db" type="integer" default="4">
+  Redis database number for filter cache data
+</ParamField>
+
+<ParamField path="fc_key_prefix" type="string" default="filter_cache:">
+  Key prefix for filter cache entries in Redis
+</ParamField>
+
+<ParamField path="fc_dump_dir" type="string" default="./data/filter_cache/">
+  Directory for filter cache persistence/dumps
+</ParamField>
+
+<ParamField path="bloom_err_rate" type="float" default="0.01">
+  Bloom filter false positive rate (1% default). Lower values use more memory but have fewer false positives.
+</ParamField>
+
+<ParamField path="bloom_init_size" type="integer" default="4000000">
+  Initial bloom filter capacity per board. Set based on expected number of hidden posts.
+</ParamField>
+
+<ParamField path="bloom_resize_mult" type="integer" default="2">
+  Growth factor when bloom filter capacity is reached (doubles by default)
+</ParamField>
+
+<ParamField path="cuckoo_capacity" type="integer" default="10000">
+  Total cuckoo filter capacity per board
+</ParamField>
+
+<ParamField path="cuckoo_bucket" type="integer" default="2000">
+  Capacity per cuckoo filter bucket
+</ParamField>
+
+<ParamField path="cuckoo_iter_max" type="integer" default="5">
+  Maximum bucket swaps per (board, num) in cuckoo filter
+</ParamField>
+
+<Accordion title="Bloom filter vs Cuckoo filter">
+  **Bloom filter:**
+  - Space-efficient probabilistic data structure
+  - Fast membership tests
+  - May have false positives (controlled by `bloom_err_rate`)
+  - Cannot remove items
+  
+  **Cuckoo filter:**
+  - Supports deletions
+  - More memory efficient at larger sizes
+  - Better worst-case lookup performance
+  - Used for smaller, more dynamic sets
+</Accordion>
+
+## Hidden images
+
+<ParamField path="hidden_images_path" type="string" default="">
+  Directory where images from hidden posts should be moved. If empty, images remain accessible via their URLs even when posts are hidden.
+  
+  **Example:** `/home/garbage/disposal`
+</ParamField>
+
+```toml
+[moderation]
+hidden_images_path = '/var/ayase/hidden_media'
+```
+
+<Note>
+  Moving images to a hidden directory prevents them from being served, even if users have direct links.
+</Note>
+
+## Authentication settings
+
+The `[moderation.auth]` section controls authentication cookies and bearer tokens for moderation access.
+
+<ParamField path="cookie_samesite" type="string" default="Strict">
+  SameSite cookie attribute for CSRF protection
+  
+  **Options:**
+  - `Strict` - Cookies only sent for same-site requests
+  - `Lax` - Cookies sent for top-level navigation
+  - `None` - Cookies sent with all requests (requires `cookie_secure = true`)
+</ParamField>
+
+<ParamField path="cookie_secure" type="boolean" default="false">
+  Require HTTPS for auth cookies. Set to `true` in production with HTTPS.
+  
+  <Warning>Always set to `true` when using HTTPS in production</Warning>
+</ParamField>
+
+<ParamField path="cookie_http_only" type="boolean" default="true">
+  Prevent JavaScript access to auth cookies (security best practice)
+</ParamField>
+
+<ParamField path="cookie_name" type="string" default="aq">
+  Name of the authentication cookie
+</ParamField>
+
+<ParamField path="cookie_salt" type="string" default="web salt" required>
+  Salt for cookie token generation. Change to a random value.
+  
+  <Warning>Use a unique, random salt in production</Warning>
+</ParamField>
+
+<ParamField path="bearer_salt" type="string" default="api salt" required>
+  Salt for API bearer token generation. Change to a random value.
+  
+  <Warning>Use a unique, random salt in production</Warning>
+</ParamField>
+
+<ParamField path="cookie_duration" type="integer" default="604800">
+  Cookie validity duration in seconds (default: 604800 = 1 week)
+</ParamField>
+
+<ParamField path="bearer_duration" type="integer" default="604800">
+  Bearer token validity duration in seconds (default: 604800 = 1 week)
+</ParamField>
+
+```toml
+[moderation.auth]
+cookie_samesite = 'Strict'
+cookie_secure = true
+cookie_http_only = true
+cookie_name = 'aq_auth'
+cookie_salt = 'random-salt-change-me-12345'
+bearer_salt = 'different-random-salt-67890'
+cookie_duration = 604_800  # 1 week
+bearer_duration = 604_800  # 1 week
+```
+
+<Accordion title="Generating secure salts">
+  Generate random salts using Python:
+  
+  ```bash
+  python -c "import secrets; print(secrets.token_hex(32))"
+  ```
+  
+  Or use OpenSSL:
+  
+  ```bash
+  openssl rand -hex 32
+  ```
+</Accordion>
+
+## Configuration examples
+
+<CodeGroup>
+```toml Development
+[moderation]
+enabled = true
+api = true
+admin_user = 'admin'
+admin_password = 'admin'
+
+hide_post_if_reported = false
+n_reports_then_hide = 5
+hide_upstream_deleted_posts = false
+remove_replies_to_hidden_op = false
+
+filter_cache_type = 'sqlite'
+regex_filter = ''
+hidden_images_path = ''
+
+[moderation.sqlite]
+database = './data/moderation.db'
+
+[moderation.auth]
+cookie_samesite = 'Lax'
+cookie_secure = false
+cookie_http_only = true
+cookie_name = 'aq'
+cookie_salt = 'dev-salt'
+bearer_salt = 'dev-bearer-salt'
+cookie_duration = 86400
+bearer_duration = 86400
+```
+
+```toml Production (SQLite)
+[moderation]
+enabled = true
+api = false
+admin_user = 'archive_admin'
+admin_password = 'very-secure-password-change-me'
+
+hide_post_if_reported = true
+n_reports_then_hide = 1
+hide_upstream_deleted_posts = true
+remove_replies_to_hidden_op = true
+
+filter_cache_type = 'sqlite'
+regex_filter = 'spam|phishing|scam'
+path_to_regex_so = '/usr/local/lib/regex0.so'
+hidden_images_path = '/var/ayase/hidden'
+
+[moderation.sqlite]
+database = '/var/ayase/moderation.db'
+
+[moderation.auth]
+cookie_samesite = 'Strict'
+cookie_secure = true
+cookie_http_only = true
+cookie_name = 'aq_prod'
+cookie_salt = 'a1b2c3d4e5f6g7h8i9j0'
+bearer_salt = 'z9y8x7w6v5u4t3s2r1q0'
+cookie_duration = 604_800
+bearer_duration = 604_800
+```
+
+```toml Production (Redis)
+[moderation]
+enabled = true
+api = true
+admin_user = 'moderator'
+admin_password = 'secure-random-password'
+
+hide_post_if_reported = true
+n_reports_then_hide = 1
+hide_upstream_deleted_posts = true
+remove_replies_to_hidden_op = true
+
+filter_cache_type = 'redis'
+regex_filter = ''
+hidden_images_path = '/mnt/storage/hidden'
+
+[moderation.redis]
+db = 4
+fc_key_prefix = 'filter_cache:'
+fc_dump_dir = '/var/ayase/filter_dumps/'
+bloom_err_rate = 0.01
+bloom_init_size = 8_000_000
+bloom_resize_mult = 2
+cuckoo_capacity = 20_000
+cuckoo_bucket = 4000
+cuckoo_iter_max = 10
+
+[moderation.auth]
+cookie_samesite = 'Strict'
+cookie_secure = true
+cookie_http_only = true
+cookie_name = 'aq_mod'
+cookie_salt = 'prod-salt-32-chars-random-here1'
+bearer_salt = 'api-salt-32-chars-random-here2'
+cookie_duration = 604_800
+bearer_duration = 2592_000  # 30 days
+```
+</CodeGroup>
+
+## Security best practices
+
+<AccordionGroup>
+  <Accordion title="Change default credentials">
+    Never use default `admin/admin` credentials in production.
+    
+    ```toml
+    admin_user = 'unique_admin_username'
+    admin_password = 'StrongP@ssw0rd!Random123'
+    ```
+  </Accordion>
+  
+  <Accordion title="Use HTTPS in production">
+    Always enable secure cookies when using HTTPS:
+    
+    ```toml
+    [moderation.auth]
+    cookie_secure = true
+    cookie_samesite = 'Strict'
+    ```
+  </Accordion>
+  
+  <Accordion title="Generate random salts">
+    Use cryptographically random salts:
+    
+    ```bash
+    python -c "import secrets; print(secrets.token_hex(32))"
+    ```
+    
+    Different salt for cookies vs bearer tokens.
+  </Accordion>
+  
+  <Accordion title="Customize login endpoint">
+    Change the login URL to reduce automated attacks:
+    
+    ```toml
+    [app]
+    login_endpoint = '/secret-admin-login-path'
+    ```
+  </Accordion>
+  
+  <Accordion title="Regular credential rotation">
+    Periodically update:
+    - Admin password
+    - Cookie salt
+    - Bearer salt
+    - Login endpoint path
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot log in to admin panel">
+    - Verify `admin_user` and `admin_password` are correct
+    - Check `moderation.enabled = true`
+    - Confirm login endpoint path (default `/login`, or custom in `[app]`)
+    - Review browser cookies (may need to clear old cookies)
+    - Check application logs for authentication errors
+  </Accordion>
+  
+  <Accordion title="Posts not being hidden after reports">
+    - Verify `hide_post_if_reported` or `n_reports_then_hide` settings
+    - Check filter cache is working (SQLite file exists or Redis is connected)
+    - Review moderation logs for errors
+    - Ensure reports are coming from different IP addresses
+  </Accordion>
+  
+  <Accordion title="Regex filter not working">
+    - Verify `regex_filter` pattern is valid
+    - For SQLite: ensure `path_to_regex_so` points to valid sqlite-regex library
+    - Test regex pattern separately before deploying
+    - Check application logs for regex compilation errors
+  </Accordion>
+  
+  <Accordion title="Hidden images still accessible">
+    - Verify `hidden_images_path` is set
+    - Check directory exists and has write permissions
+    - Ensure application user can move files to the directory
+    - Images remain at original path until explicitly moved
+  </Accordion>
+</AccordionGroup>

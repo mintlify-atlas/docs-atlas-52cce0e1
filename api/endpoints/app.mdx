@@ -1,0 +1,198 @@
+---
+title: App endpoints
+description: Public API endpoints for accessing board catalogs, threads, and indexes
+---
+
+The app endpoints provide access to board data in JSON format, compatible with the 4chan API structure. All endpoints support optional authentication to filter reported content.
+
+## Authentication
+
+These endpoints support optional JWT authentication via the `api_usr_authenticated` decorator. When authenticated, reported posts are filtered based on the user's authority level.
+
+<Note>
+Unauthenticated requests will receive filtered content with reported posts hidden according to the moderation settings.
+</Note>
+
+## Get catalog
+
+```http
+GET /api/v1/{board}/catalog.json
+```
+
+Retrieves the catalog for a specific board, containing all threads organized by pages.
+
+<ParamField path="board" type="string" required>
+  Board shortname (e.g., "g", "a", "tech")
+</ParamField>
+
+<ParamField header="Authorization" type="string">
+  Bearer token for authenticated requests (optional)
+</ParamField>
+
+### Response
+
+Returns an array of page objects, each containing threads for that page.
+
+<ResponseField name="threads" type="array">
+  Array of thread objects in the catalog. Reported posts are filtered based on authentication status.
+</ResponseField>
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/g/catalog.json" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+<Expandable title="Example response">
+```json
+[
+  {
+    "page": 1,
+    "threads": [
+      {
+        "no": 12345678,
+        "sticky": 0,
+        "closed": 0,
+        "now": "01/15/26(Wed)12:34:56",
+        "name": "Anonymous",
+        "sub": "Thread Subject",
+        "com": "Thread content...",
+        "replies": 42,
+        "images": 15
+      }
+    ]
+  }
+]
+```
+</Expandable>
+
+## Get thread
+
+```http
+GET /api/v1/{board}/thread/{thread_id}.json
+```
+
+Retrieves a complete thread with all posts.
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+<ParamField path="thread_id" type="integer" required>
+  Thread ID (OP post number)
+</ParamField>
+
+<ParamField header="Authorization" type="string">
+  Bearer token for authenticated requests (optional)
+</ParamField>
+
+### Response
+
+Returns a thread object containing the OP and all replies.
+
+<ResponseField name="posts" type="array">
+  Array of post objects in the thread. Reported posts are filtered based on authentication status.
+</ResponseField>
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/g/thread/12345678.json" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+<Expandable title="Example response">
+```json
+{
+  "posts": [
+    {
+      "no": 12345678,
+      "sticky": 0,
+      "closed": 0,
+      "now": "01/15/26(Wed)12:34:56",
+      "name": "Anonymous",
+      "sub": "Thread Subject",
+      "com": "OP post content..."
+    },
+    {
+      "no": 12345679,
+      "now": "01/15/26(Wed)12:35:12",
+      "name": "Anonymous",
+      "com": "Reply content..."
+    }
+  ]
+}
+```
+</Expandable>
+
+## Get board index
+
+```http
+GET /api/v1/{board}/{page_num}.json
+```
+
+Retrieves a specific page of the board index with thread previews.
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+<ParamField path="page_num" type="integer" required>
+  Page number (0-indexed)
+</ParamField>
+
+<ParamField header="Authorization" type="string">
+  Bearer token for authenticated requests (optional)
+</ParamField>
+
+### Response
+
+Returns an index object containing threads for the requested page.
+
+<ResponseField name="threads" type="array">
+  Array of thread objects with preview posts. Reported posts are filtered based on authentication status.
+</ResponseField>
+
+<Expandable title="Example request">
+```bash
+curl -X GET "https://archive.example.com/api/v1/g/0.json" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+</Expandable>
+
+<Expandable title="Example response">
+```json
+{
+  "threads": [
+    {
+      "no": 12345678,
+      "sticky": 0,
+      "closed": 0,
+      "now": "01/15/26(Wed)12:34:56",
+      "name": "Anonymous",
+      "sub": "Thread Subject",
+      "com": "Thread content...",
+      "replies": 42,
+      "images": 15,
+      "last_replies": [
+        {
+          "no": 12345720,
+          "now": "01/15/26(Wed)13:45:23",
+          "name": "Anonymous",
+          "com": "Recent reply..."
+        }
+      ]
+    }
+  ]
+}
+```
+</Expandable>
+
+## Error handling
+
+All endpoints validate the board shortname and will return an error if the board does not exist.
+
+<Warning>
+Invalid board names will result in a validation error. Ensure the board shortname matches a configured board.
+</Warning>

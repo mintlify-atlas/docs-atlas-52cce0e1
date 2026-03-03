@@ -1,0 +1,97 @@
+---
+title: Board routes
+description: Web interface endpoints for viewing board indexes and catalogs
+---
+
+## Board index
+
+```http
+GET /<board>
+```
+
+Displays the first page of threads for a board in index view.
+
+<ParamField path="board" type="string" required>
+  Board shortname (e.g., `g`, `tech`, `lambda`)
+</ParamField>
+
+### Response
+
+Returns an HTML page with:
+- Thread previews showing OP and recent replies
+- Thread statistics (reply count, image count)
+- Pagination controls
+- Report form (if authenticated)
+
+<Note>
+The index view shows the most recent threads with a configurable number of preview posts per thread.
+</Note>
+
+## Board index page
+
+```http
+GET /<board>/page/<page_num>
+```
+
+Displays a specific page of threads for a board in index view.
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+<ParamField path="page_num" type="integer" required>
+  Page number (0-indexed)
+</ParamField>
+
+### Response
+
+Returns an HTML page with the same structure as the board index, showing threads for the requested page.
+
+<Note>
+Pagination starts at page 0. Each page displays a configured number of threads.
+</Note>
+
+## Catalog
+
+```http
+GET /<board>/catalog
+```
+
+Displays the first page of the board catalog with thread cards showing thumbnails and metadata.
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+### Response
+
+Returns an HTML page with:
+- Grid layout of thread cards
+- Thread thumbnails (if available)
+- Reply and image counts
+- Pagination for large boards
+- Admin controls (if authenticated as admin)
+
+<Note>
+Catalog view provides a visual overview of threads. Each page shows up to 150 threads divided into batches of 15.
+</Note>
+
+## Catalog page
+
+```http
+GET /<board>/catalog/<page_num>
+```
+
+Displays a specific page of the board catalog.
+
+<ParamField path="board" type="string" required>
+  Board shortname
+</ParamField>
+
+<ParamField path="page_num" type="integer" required>
+  Page number (0-indexed)
+</ParamField>
+
+### Response
+
+Returns an HTML page with catalog cards for the requested page.

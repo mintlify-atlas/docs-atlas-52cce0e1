@@ -1,80 +1,327 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get your Ayase Quart instance up and running in minutes with this quick start guide.
 ---
 
-## Get started in three steps
+## Quick setup
 
-Get your documentation site running locally and make your first customization.
+This guide assumes you've completed the [Installation](/installation) steps. We'll get your Ayase Quart instance running in just a few commands.
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Activate your virtual environment">
+    ```bash
+    source venv/bin/activate
+    ```
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Verify configuration">
+    Ensure your `config.toml` and `boards.toml` files are properly configured with your database connection and desired boards.
 
-### Step 2: Deploy your changes
+    Check that your boards are properly set up:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    ayaseq prep boards
+    ```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    If successful, you should see `ok`.
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Launch the webserver">
+    Start Ayase Quart with Hypercorn:
 
-### Step 3: Go live
+    ```bash
+    hypercorn -w 2 -b 127.0.0.1:9001 ayase_quart.main:app
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    <Note>
+    The `-w 2` flag specifies 2 worker processes. Adjust based on your server's capabilities. The `-b` flag sets the bind address and port.
+    </Note>
+  </Step>
+
+  <Step title="Access your archive">
+    Open your browser and navigate to:
+
+    ```
+    http://127.0.0.1:9001
+    ```
+
+    You should see the Ayase Quart interface with your configured boards!
+  </Step>
+</Steps>
+
+## Basic usage
+
+### Browsing archives
+
+Once your instance is running, you can:
+
+- **View board index** - Click on any board to see threads
+- **Browse catalog** - Switch to catalog view for visual thread browsing
+- **Read threads** - Click any thread to view full posts and replies
+- **Hover over quotelinks** - Preview referenced posts inline
+
+### Searching
+
+Ayase Quart provides two types of search:
+
+<Tabs>
+  <Tab title="SQL search">
+    Navigate to the search page and use the search form. You can search by:
+    - Comment text
+    - Subject
+    - Username
+    - Tripcode
+    - Date range
+    - File properties (filename, dimensions, etc.)
+  </Tab>
+  <Tab title="Full-text search">
+    If you've configured a search engine (LNX, Meilisearch, or Typesense), you'll have access to full-text search with:
+    - Faster text queries
+    - Advanced pattern matching
+    - Gallery mode results
+    - Multi-board search
+  </Tab>
+</Tabs>
+
+### Moderation
+
+The moderation system requires authentication. The default credentials are:
+
+- **Username**: `admin`
+- **Password**: `admin`
+
+<Warning>
+Change the default admin credentials immediately in a production environment!
+</Warning>
+
+Access moderation features through:
+
+- **Web UI** - Cookie-based authentication with math captcha
+- **REST API** - Bearer token authentication (create token via POST to `/api/v1/login`)
+- **CLI** - Direct server access, no authentication needed
+
+## CLI commands
+
+Ayase Quart includes a CLI for various administrative tasks:
+
+### Report management
+
+View report count:
+```bash
+python -m ayase_quart.cli.reports cli-get-report-count
+```
+
+List reports:
+```bash
+python -m ayase_quart.cli.reports cli-get-reports --public_access v --created_at_gte "2024-01-01"
+```
+
+Take action on reports:
+```bash
+python -m ayase_quart.cli.reports cli-reports-action \
+  --report_parent_id 123 \
+  --action report_close \
+  --mod_notes "Resolved"
+```
+
+### Preparation commands
+
+Generate secret key:
+```bash
+ayaseq prep secret
+```
+
+Update JavaScript integrity hashes:
+```bash
+ayaseq prep hashjs
+```
+
+Validate boards configuration:
+```bash
+ayaseq prep boards
+```
+
+### Search index management
+
+Create search index:
+```bash
+ayaseq search index create
+```
+
+Load boards into search index:
+```bash
+ayaseq search load full g v a pol
+```
+
+Reset search index:
+```bash
+ayaseq search index reset
+```
+
+## Configuration quick reference
+
+### Common settings
+
+Key configuration options in `config.toml`:
+
+```toml
+[app]
+url = 'http://127.0.0.1:9001'
+port = 9001
+rate_limiter = true
+
+[site]
+name = 'Ayase Quart'
+theme = 'tomorrow'
+anonymous_username = 'Anonymous'
+
+[archive]
+type = 'yotsuba'  # 'yotsuba' (4chan), 'vichan' (lainchan)
+canonical_name = '4chan'
+canonical_host = 'https://boards.4chan.org'
+
+[vanilla_search]
+enabled = true
+hits_per_page = 50
+max_hits = 1_000
+
+[moderation]
+enabled = true
+```
+
+### Media configuration
+
+Configure how images and thumbnails are served:
+
+```toml
+[media]
+image_uri = "http://192.168.1.16:9001/static/ritual/{board}/image"
+thumb_uri = "http://192.168.1.16:9001/static/ritual/{board}/thumb"
+serve_outside_static = false
+```
+
+## Production deployment
+
+For production use, set up a systemd service:
+
+<CodeGroup>
+```ini systemd.service
+[Unit]
+Description=Ayase Quart Archive Interface
+After=network.target mysql.service redis.service
+
+[Service]
+Type=notify
+User=your-user
+WorkingDirectory=/path/to/ayase-quart
+Environment="PATH=/path/to/ayase-quart/venv/bin"
+ExecStart=/path/to/ayase-quart/venv/bin/hypercorn -w 2 -b 127.0.0.1:9001 ayase_quart.main:app
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash Commands
+# Enable and start service
+sudo systemctl enable ayase-quart
+sudo systemctl start ayase-quart
+
+# Check status
+sudo systemctl status ayase-quart
+
+# View logs
+sudo journalctl -u ayase-quart -f
+```
+</CodeGroup>
+
+## Updating Ayase Quart
+
+To update your installation:
+
+<Steps>
+  <Step title="Pull latest changes">
+    ```bash
+    git pull --ff origin main
+    ```
+  </Step>
+
+  <Step title="Update JavaScript hashes">
+    ```bash
+    ayaseq prep hashjs
+    ```
+  </Step>
+
+  <Step title="Restart service">
+    ```bash
+    sudo systemctl restart ayase-quart
+    sudo systemctl status ayase-quart
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Check if new fields have been added or removed in `config.toml` after updating. Compare with `config.tpl.toml`.
+</Note>
+
+## Troubleshooting
+
+### Server won't start
+
+Check that:
+- Your database is accessible
+- Ports aren't already in use
+- SSL certificates exist (if configured)
+- Config files are valid TOML
+
+### Database connection errors
+
+**MySQL access denied error:**
+
+```sql
+DROP User 'myuser'@'localhost';
+DROP User 'myuser'@'%';
+CREATE USER 'myuser'@'%' IDENTIFIED BY 'mypassword';
+GRANT ALL PRIVILEGES ON * . * TO 'myuser'@'%';
+```
+
+Then restart MySQL:
+```bash
+sudo systemctl restart mysql
+```
+
+### No boards appearing
+
+Verify your boards configuration:
+```bash
+ayaseq prep boards
+```
+
+Check that your database contains the configured boards.
+
+## API documentation
+
+Once running, visit `/docs` on your instance for interactive API documentation:
+
+```
+http://127.0.0.1:9001/docs
+```
+
+The API supports:
+- Thread and post retrieval
+- Search operations
+- Moderation actions
+- Report management
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that your instance is running:
 
-<CardGroup cols={2}>
+- Explore the search features
+- Set up full-text search for better performance
+- Configure moderation tools
+- Customize the theme and branding
+- Set up automated backups of your moderation database
+- Configure a reverse proxy (nginx, caddy) for production use
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+For advanced configuration and plugin development, check the [GitHub repository](https://github.com/sky-cake/ayase-quart).

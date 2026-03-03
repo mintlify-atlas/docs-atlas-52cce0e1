@@ -1,0 +1,75 @@
+---
+title: Plugin system overview
+description: Extend Ayase Quart with custom search plugins and blueprint endpoints
+---
+
+Ayase Quart supports two types of plugins to extend its functionality:
+
+- **Search plugins** - Add custom search capabilities for SQL and full-text search
+- **Blueprint plugins** - Create custom endpoints and routes
+
+## How plugins work
+
+Plugins are automatically discovered and loaded when Ayase Quart starts. The plugin system uses Python's `importlib` and `pkgutil` to scan for modules in specific directories.
+
+When plugins are detected and loaded successfully, you'll see log messages in stdout:
+
+```bash
+Loading search plugin: ayase_quart.plugins.search.search_tagger
+Loading bp plugin: ayase_quart.plugins.blueprints.bp_tagger
+```
+
+## Plugin types
+
+<CardGroup cols={2}>
+  <Card title="Search plugins" icon="magnifying-glass" href="/plugins/search-plugins">
+    Extend search functionality with custom fields and search logic
+  </Card>
+  <Card title="Blueprint plugins" icon="route" href="/plugins/blueprint-plugins">
+    Add custom HTTP endpoints and routes to your instance
+  </Card>
+</CardGroup>
+
+## Enabling plugins
+
+Plugins must be enabled in your `config.toml` file:
+
+```toml
+[search_plugins]
+enabled = true
+```
+
+<Note>
+  Both search plugins and blueprint plugins use the same `search_plugins.enabled` configuration option.
+</Note>
+
+## Plugin locations
+
+Place your plugin files in these directories within the source code:
+
+- Search plugins: `src/ayase_quart/plugins/search/`
+- Blueprint plugins: `src/ayase_quart/plugins/blueprints/`
+
+## Post-filtering consideration
+
+<Warning>
+  Search plugins have a "[post-filtering](https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/post-filtering/#single-query-scenario)" limitation.
+</Warning>
+
+Because plugin search is uncoupled from native search (SQL or FTS), there's no way to do common pagination. After getting `board_2_nums` from plugin search results, a second filtering round occurs via native search. This makes final page sizes unpredictable—they can be less than or equal to the plugin search result's page size.
+
+### Recommendations for plugin developers
+
+- If **only** plugin form fields are submitted, do regular paging with your plugin
+- If additional plugin form fields are submitted, return **more than** `per_page` results from your plugins to increase the likelihood of reaching the `per_page` figure after native search filtering
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Create a search plugin" icon="magnifying-glass" href="/plugins/search-plugins">
+    Learn how to implement custom search functionality
+  </Card>
+  <Card title="Create a blueprint plugin" icon="route" href="/plugins/blueprint-plugins">
+    Learn how to add custom endpoints
+  </Card>
+</CardGroup>

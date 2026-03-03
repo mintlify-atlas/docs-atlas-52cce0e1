@@ -1,0 +1,440 @@
+---
+title: Moderation
+description: Manage reports, hide inappropriate content, and moderate your archive with web, API, and CLI tools
+---
+
+Ayase Quart includes a comprehensive moderation system for managing user reports, filtering content, and maintaining archive quality. Moderation is available through web interface, API, and command-line tools.
+
+## Overview
+
+The moderation system provides:
+
+<CardGroup cols={2}>
+  <Card title="Report management" icon="flag">
+    Track and process user-submitted content reports
+  </Card>
+  <Card title="Content filtering" icon="eye-slash">
+    Automatically hide reported or filtered posts
+  </Card>
+  <Card title="User authentication" icon="lock">
+    Role-based access with admin and moderator permissions
+  </Card>
+  <Card title="Multi-interface access" icon="terminal">
+    Moderate via web UI, REST API, or CLI
+  </Card>
+</CardGroup>
+
+## Authentication
+
+Moderation requires authentication. Three interfaces are supported:
+
+### Web authentication
+
+<Steps>
+  <Step title="Navigate to login">
+    Visit `/login` or click the login link
+  </Step>
+  <Step title="Solve captcha">
+    Complete a math captcha to prevent automated abuse
+  </Step>
+  <Step title="Enter credentials">
+    Provide your username and password
+  </Step>
+  <Step title="Access tools">
+    Once logged in, moderation tools appear on posts and in the navigation
+  </Step>
+</Steps>
+
+<Note>
+  Cookie-based sessions are used for web authentication. HTTPS is required unless `moderation.auth.cookie_secure=false` in configuration.
+</Note>
+
+### API authentication
+
+API access uses bearer token authentication:
+
+<Steps>
+  <Step title="Request token">
+    POST credentials to `/api/v1/login`:
+    ```json
+    {
+      "username": "admin",
+      "password": "your_password"
+    }
+    ```
+  </Step>
+  <Step title="Receive token">
+    Response includes an authentication token:
+    ```json
+    {
+      "token": "eyJhbGciOiJIUzI1NiIs...",
+      "expires": "2024-01-01T12:00:00Z"
+    }
+    ```
+  </Step>
+  <Step title="Use token">
+    Include token in Authorization header:
+    ```
+    Authorization: bearer eyJhbGciOiJIUzI1NiIs...
+    ```
+  </Step>
+</Steps>
+
+### CLI access
+
+Command-line tools require no authentication since they run directly on the server:
+
+```bash
+python -m ayase_quart.cli.reports cli-get-reports
+```
+
+## User management
+
+Administrators can create and manage moderator accounts:
+
+### Default credentials
+
+The default admin account is created on first startup:
+- **Username**: `admin`
+- **Password**: `admin` (or configured value from `config.toml`)
+
+<Warning>
+  Change the default admin password immediately in production!
+</Warning>
+
+### User roles
+
+**Administrator**
+- Full system access
+- Create and manage users
+- All moderation permissions
+- Delete posts permanently
+
+**Moderator**
+- Report management based on assigned permissions
+- Hide/show posts
+- Close reports
+- Limited by permission flags
+
+### Permissions system
+
+Granular permissions control what moderators can do:
+
+- `report_read`: View reports
+- `report_write`: Modify report status
+- `post_hide`: Hide posts from public view
+- `post_show`: Restore hidden posts
+- Additional permissions for advanced features
+
+## Report system
+
+Users can report inappropriate or illegal content:
+
+### Submitting reports
+
+<Steps>
+  <Step title="Open report form">
+    Click the "Report" button on any post (appears when CSRF token is active)
+  </Step>
+  <Step title="Select category">
+    Choose a report category:
+    - NSFW content on SFW board
+    - Illegal content
+    - DCMA violation
+    - Spam
+    - Other violations
+  </Step>
+  <Step title="Add notes">
+    Optionally provide details about the issue (max 512 characters)
+  </Step>
+  <Step title="Submit">
+    Click Submit to create the report
+  </Step>
+</Steps>
+
+<Info>
+  Report submissions are rate limited to 4 reports per hour per IP address
+</Info>
+
+### Report behavior
+
+When a post is reported:
+
+1. **Report record created**: Stored in moderation database with submitter IP, category, and notes
+2. **Automatic hiding** (optional): If `hide_post_if_reported` is enabled, post media is immediately hidden
+3. **Threshold hiding** (optional): If `n_reports_then_hide` is set, posts are hidden after N reports
+4. **Filter cache update**: Hidden posts are added to the filter cache (Redis or SQLite)
+
+### Viewing reports
+
+Moderators can view reports in the web interface:
+
+**Open reports**: `/reports/open`
+- Active reports requiring attention
+- Paginated view (20 per page)
+- Sortable and filterable
+
+**Closed reports**: `/reports/closed`
+- Resolved reports for reference
+- Same pagination and filtering
+
+### Report details
+
+Each report shows:
+
+- **Post preview**: Full post with media and content
+- **Report metadata**: IP count, category, submitter notes
+- **Moderation notes**: Internal notes for moderator collaboration
+- **Actions**: Hide/show post, open/close report
+- **Links**: View in thread, view on source (4chan/Lainchan)
+
+## Moderation actions
+
+Moderators can perform several actions on reported posts:
+
+### Post actions
+
+<Accordion title="Hide post">
+  Removes post from public view:
+  - Post marked as hidden in filter cache
+  - Regular users don't see the post
+  - Moderators and admins still see it
+  - Reversible with "Show post" action
+
+  Route: `src/ayase_quart/blueprints/web/bp_moderation.py:239`
+</Accordion>
+
+<Accordion title="Show post">
+  Restores a hidden post:
+  - Post becomes visible to all users
+  - Removes from filter cache
+  - Marks report as closed (optional)
+
+  Route: `src/ayase_quart/blueprints/web/bp_moderation.py:239`
+</Accordion>
+
+<Accordion title="Nuke post (admin only)">
+  Permanently deletes a post:
+  - Removes from database
+  - Cannot be undone
+  - Requires admin privileges
+
+  Route: `src/ayase_quart/blueprints/web/bp_moderation.py:49`
+</Accordion>
+
+### Report actions
+
+<Accordion title="Close report">
+  Marks report as resolved:
+  - Moves to closed reports list
+  - Post visibility unchanged
+  - Can be reopened later
+</Accordion>
+
+<Accordion title="Open report">
+  Marks report as active:
+  - Moves to open reports list
+  - Requires moderator attention
+</Accordion>
+
+<Accordion title="Save moderation notes">
+  Add internal notes:
+  - Visible only to moderators
+  - Document decisions and context
+  - Useful for collaboration
+</Accordion>
+
+### Bulk actions
+
+Process multiple reports simultaneously:
+
+1. **Select reports**: Check boxes next to reports
+2. **Choose action**: Hide/show posts or close/open reports
+3. **Confirm**: Apply action to all selected reports
+
+Bulk actions are processed via: `src/ayase_quart/blueprints/web/bp_moderation.py:260`
+
+## Filter cache
+
+The filter cache tracks hidden posts for fast lookup:
+
+### Cache backends
+
+<CardGroup cols={3}>
+  <Card title="Redis" icon="database">
+    Recommended for production. Fast in-memory cache.
+  </Card>
+  <Card title="SQLite" icon="database">
+    Good for single-instance deployments.
+  </Card>
+  <Card title="Null" icon="ban">
+    Disables filtering (not recommended).
+  </Card>
+</CardGroup>
+
+### Cache operations
+
+- **Insert post**: Add post to hidden list
+- **Remove post**: Remove from hidden list  
+- **Check post**: Verify if post is hidden
+- **Filter list**: Remove hidden posts from result sets
+
+### Configuring Redis
+
+For best performance, use Redis:
+
+```toml
+[moderation.filter_cache]
+backend = "redis"
+host = "localhost"
+port = 6379
+```
+
+Start Redis:
+```bash
+sudo systemctl start redis
+sudo systemctl enable redis
+```
+
+## Content filtering
+
+Posts are filtered from view based on moderation status:
+
+### Filter logic
+
+When loading posts:
+1. Query posts from database
+2. Check each post against filter cache
+3. Remove hidden posts (for regular users)
+4. Return filtered results
+
+Moderators see all posts regardless of status.
+
+### Filter points
+
+Filtering occurs at:
+- Board index: `src/ayase_quart/blueprints/web/bp_app.py:101`
+- Thread view: `src/ayase_quart/blueprints/web/bp_app.py:295`
+- Catalog: `src/ayase_quart/blueprints/web/bp_app.py:215`
+- Search results: `src/ayase_quart/blueprints/web/bp_search.py:192`
+- API endpoints: All JSON responses
+
+## CLI tools
+
+Manage moderation from the command line:
+
+### View reports
+
+```bash
+# Get report count
+python -m ayase_quart.cli.reports cli-get-report-count
+
+# List reports
+python -m ayase_quart.cli.reports cli-get-reports
+
+# Filter by status
+python -m ayase_quart.cli.reports cli-get-reports --mod_status open
+
+# Filter by date
+python -m ayase_quart.cli.reports cli-get-reports --created_at_gte "2024-01-01"
+```
+
+### Manage reports
+
+```bash
+# Close a report
+python -m ayase_quart.cli.reports cli-reports-action \
+  -id 123 \
+  -action report_close
+
+# Hide a post
+python -m ayase_quart.cli.reports cli-reports-action \
+  -id 123 \
+  -action post_hide
+
+# Add moderation notes
+python -m ayase_quart.cli.reports cli-reports-action \
+  -id 123 \
+  -action report_save_notes \
+  -notes "Reviewed and confirmed violation"
+```
+
+### Available actions
+
+- `report_close`: Close report
+- `report_open`: Reopen report
+- `post_hide`: Hide post from public
+- `post_show`: Show hidden post
+- `post_delete`: Delete post (admin only)
+- `media_hide`: Hide only media
+- `media_show`: Show hidden media
+- `report_save_notes`: Update moderation notes
+
+## Security features
+
+### CSRF protection
+
+All moderation actions require CSRF tokens:
+- Tokens generated per-session
+- Validated on form submission
+- Prevents cross-site request forgery
+
+Route: `src/ayase_quart/security/captcha.py`
+
+### Rate limiting
+
+- Report submissions: 4 per hour per IP
+- Search requests: 5 per minute per IP
+- Configurable limits for other endpoints
+
+### SSL/TLS requirement
+
+For production:
+- HTTPS required for cookie security
+- SSL certificates in `cert.pem` and `key.pem`
+- Generate with: `openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout key.pem -out cert.pem`
+
+<Warning>
+  Running without HTTPS in production exposes authentication cookies to interception
+</Warning>
+
+## Configuration
+
+Key moderation settings in `config.toml`:
+
+```toml
+[moderation]
+enabled = true
+admin_user = "admin"
+admin_password = "admin"  # Change this!
+hide_post_if_reported = true
+n_reports_then_hide = 3
+
+[moderation.auth]
+cookie_secure = true
+token_expiration_hours = 24
+
+[moderation.filter_cache]
+backend = "redis"  # or "sqlite" or "null"
+host = "localhost"
+port = 6379
+```
+
+## API endpoints
+
+Moderation APIs (require authentication):
+
+- `POST /nuke/<board>/<num>`: Delete post (admin only)
+- `POST /report/<board>/<thread_num>/<num>`: Submit report
+- `GET /reports/open`: List open reports
+- `GET /reports/closed`: List closed reports
+- `POST /reports/<report_id>/<action>`: Perform moderation action
+- `POST /reports/bulk/<action>`: Bulk moderation actions
+
+See API reference documentation for request/response formats.
+
+References:
+- Moderation init: `src/ayase_quart/moderation/__init__.py:8`
+- Web routes: `src/ayase_quart/blueprints/web/bp_moderation.py:46`
+- API routes: `src/ayase_quart/blueprints/api/bp_moderation.py`
+- Report system: `src/ayase_quart/moderation/report.py`
